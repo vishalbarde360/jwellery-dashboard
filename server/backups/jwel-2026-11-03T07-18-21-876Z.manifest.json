@@ -1,0 +1,27 @@
+{
+  "file": "jwel-2026-11-03T07-18-21-876Z.ndjson.gz",
+  "db": "jwel",
+  "createdAt": "2026-11-03T07:18:23.593Z",
+  "counts": {
+    "settings": 1,
+    "stockadjustments": 1,
+    "auditlogs": 54,
+    "stockmovements": 9,
+    "idempotencykeys": 1,
+    "invoices": 1,
+    "branches": 2,
+    "counters": 4,
+    "purchases": 1,
+    "users": 7,
+    "tenants": 2,
+    "suppliers": 2,
+    "rates": 4,
+    "items": 6,
+    "returns": 1,
+    "products": 5,
+    "customers": 2,
+    "stockcounts": 0
+  },
+  "sha256": "ce9cb0080101f26b03336906e71e69c2c444aad5192fa07914605c6f4ca50cf9",
+  "bytes": 5643
+}
