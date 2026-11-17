@@ -22,7 +22,7 @@ export async function startApp({ dbName, port }) {
     PORT: String(port),
     JWT_SECRET: 'test-secret-not-for-production',
     NODE_ENV: 'test',
-    CLIENT_URL: 'http://localhost:5173',
+    CLIENT_URL: 'https://jwellery-dashboard-pos.vercel.app',
     BACKUP_ENABLED: 'false',
   };
   const seed = spawnSync('node', ['src/seed.js'], { cwd: serverDir, env, encoding: 'utf8' });
