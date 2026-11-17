@@ -1,23 +1,41 @@
+
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api' });
+const api = axios.create({
+  baseURL: 'https://jwellery-dashboard.onrender.com',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
+// Attach JWT token
 api.interceptors.request.use((cfg) => {
   const token = localStorage.getItem('wn_token');
-  if (token) cfg.headers.Authorization = `Bearer ${token}`;
+
+  if (token) {
+    cfg.headers.Authorization = `Bearer ${token}`;
+  }
+
   return cfg;
 });
 
+// Handle API errors
 api.interceptors.response.use(
-  (r) => r,
+  (response) => response,
   (err) => {
-    if (err.response?.status === 401 && !location.pathname.startsWith('/login')) {
+    if (
+      err.response?.status === 401 &&
+      !location.pathname.startsWith('/login')
+    ) {
       localStorage.removeItem('wn_token');
       location.href = '/login';
     }
+
     return Promise.reject(err);
   }
 );
 
-export const errMsg = (e) => e.response?.data?.message || 'Could not reach the server';
+export const errMsg = (e) =>
+  e.response?.data?.message || 'Could not reach the server';
+
 export default api;
