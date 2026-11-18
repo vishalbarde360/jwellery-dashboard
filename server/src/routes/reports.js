@@ -24,8 +24,67 @@ function range(req, tz) {
   return { from, to, createdAt: dayRange(from, to, tz) };
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const shortDate = (s) => `${s.slice(8, 10)} ${MONTHS[Number(s.slice(5, 7)) - 1]}`;
+const hourLabel = (h) => `${String(h % 12 || 12).padStart(2, '0')}:00 ${h < 12 ? 'AM' : 'PM'}`;
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Other');
+
+// Extra dashboard data: sales graph, category split, latest bills and gold sold today.
+// rangeKey = today | week | month (only the graph and the split follow it).
+async function dashboardExtras(rangeKey, tz, today) {
+  const key = rangeKey === 'week' || rangeKey === 'month' ? rangeKey : 'today';
+  const days = key === 'month' ? 29 : key === 'week' ? 6 : 0;
+  const from = addDays(today, -days);
+  const match = { status: 'paid', createdAt: dayRange(from, today, tz) };
+  const bucket = days === 0
+    ? { $hour: { date: '$createdAt', timezone: tz } }
+    : { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: tz } };
+
+  const [series, split, latest] = await Promise.all([
+    Invoice.aggregate([{ $match: match }, { $group: { _id: bucket, value: { $sum: '$grandTotal' } } }, { $sort: { _id: 1 } }]),
+    Invoice.aggregate([{ $match: match }, { $unwind: '$lines' }, { $group: { _id: '$lines.metal', amount: { $sum: '$lines.total' } } }, { $sort: { amount: -1 } }]),
+    Invoice.find({ status: 'paid' }).sort({ createdAt: -1 }).limit(6).select('invoiceNo status grandTotal customer lines payments').lean(),
+  ]);
+
+  // Graph points. Today = one point per hour between the first and last sale; week/month = one point per day.
+  const by = new Map(series.map((s) => [s._id, s.value]));
+  const hourly = [];
+  if (days === 0) {
+    if (series.length) {
+      // Always show at least 10 AM to 8 PM so even a single sale draws a graph (hours with no sale are 0).
+      const lo = Math.min(series[0]._id, 10), hi = Math.max(series[series.length - 1]._id, 20);
+      for (let h = lo; h <= hi; h++) hourly.push({ label: hourLabel(h), value: r2(by.get(h)) });
+    }
+  } else {
+    for (let i = 0; i <= days; i++) { const d = addDays(from, i); hourly.push({ label: shortDate(d), value: r2(by.get(d)) }); }
+  }
+
+  // Gold sold today (net grams). Pieces that came back through a completed return are left out.
+  const todays = await Invoice.find({ status: 'paid', createdAt: dayRange(today, today, tz) }).select('invoiceNo lines.item lines.metal').lean();
+  const back = new Set((await Return.find({ status: 'completed', invoiceNo: { $in: todays.map((i) => i.invoiceNo) } }).select('invoiceNo lines.item').lean())
+    .flatMap((r) => r.lines.map((l) => `${r.invoiceNo}|${l.item}`)));
+  const goldIds = todays.flatMap((i) => i.lines.filter((l) => l.metal === 'gold' && !back.has(`${i.invoiceNo}|${l.item}`)).map((l) => l.item));
+  const goldItems = goldIds.length ? await Item.find({ _id: { $in: goldIds } }).select('netWeight').lean() : [];
+  const goldGrams = Math.round(goldItems.reduce((s, i) => s + (i.netWeight || 0), 0) * 1000) / 1000;
+
+  return {
+    hourly,
+    mix: split.map((r) => ({ name: cap(r._id), amount: r2(r.amount) })),
+    goldGrams,
+    recent: latest.map((i) => ({
+      no: i.invoiceNo,
+      status: i.status,
+      amount: r2(i.grandTotal),
+      party: i.customer?.name || 'Walk-in',
+      note: (i.lines || []).slice(0, 2).map((l) => l.name || `${cap(l.metal)} ${l.purity}`).join(', '),
+      mode: (i.payments || []).map((p) => p.mode).join(' + '),
+    })),
+  };
+}
+
 // Dashboard: today's sales, stock summary and alerts. Each part is shown only to roles allowed to see it.
 router.get('/dashboard', async (req, res) => {
+  res.set('Cache-Control', 'no-store'); // always fresh, so the graph and latest bills stay real-time
   const tz = await tzOf();
   const today = todayStr(tz);
   const out = { today, alerts: [] };
@@ -38,11 +97,26 @@ router.get('/dashboard', async (req, res) => {
       Invoice.aggregate([{ $match: match }, { $unwind: '$payments' }, { $group: { _id: '$payments.mode', amount: { $sum: '$payments.amount' } } }]),
     ]);
     out.sales = { count: t?.count || 0, total: r2(t?.total), byMode: byMode.map((m) => ({ mode: m._id, amount: r2(m.amount) })) };
+
+    try {
+      const extras = await dashboardExtras(req.query.range, tz, today);
+      out.sales.goldGrams = extras.goldGrams;
+      out.hourly = extras.hourly;
+      out.mix = extras.mix;
+      out.recent = extras.recent;
+    } catch (e) {
+      // Do not break the whole dashboard if the graph part fails. Check the server console for the reason.
+      console.error('dashboardExtras failed:', e);
+      out.hourly = [];
+      out.mix = [];
+      out.recent = [];
+    }
   }
   if (can(role, 'stock.read')) out.stock = await stockSummary(role);
 
   if (can(role, 'rates.read')) {
     const rates = await latestRates();
+    out.rates = { gold22: rates.get('gold|22K')?.perGram ?? null };
     const start = dayRange(today, today, tz).$gte;
     const pairs = await Item.aggregate([{ $match: { status: 'available' } }, { $group: { _id: { metal: '$metal', purity: '$purity' } } }]);
     for (const p of pairs) {
@@ -66,6 +140,9 @@ router.get('/dashboard', async (req, res) => {
     const rec = await reconcile();
     if (rec.mismatches.length) out.alerts.push({ level: 'error', text: `${rec.mismatches.length} piece(s) do not match their stock history. Open Reports > Stock.`, href: '/reports' });
   }
+
+  const shop = await Setting.findOne().lean();
+  out.shop = { branch: shop?.shopName || shop?.name || '' };
   res.json(out);
 });
 
