@@ -14,12 +14,18 @@ export default function Reports() {
   const [tab, setTab] = useState('sales');
   const [from, setFrom] = useState(addDays(today, -29));
   const [to, setTo] = useState(today);
-  const [d, setD] = useState(null);
+  // Store the data together with the tab it belongs to, so a Sales response is never shown on the Stock/Tax/Margin tab.
+  const [res, setRes] = useState(null);
+  const d = res && res.tab === tab ? res.data : null;
   const [msg, setMsg] = useState(null);
 
   useEffect(() => {
-    setD(null);
-    api.get(`/reports/${tab}`, { params: { from, to } }).then((r) => { setD(r.data); setMsg(null); }).catch((e) => setMsg({ type: 'err', text: errMsg(e) }));
+    let alive = true;
+    setMsg(null);
+    api.get(`/reports/${tab}`, { params: { from, to } })
+      .then((r) => { if (alive) { setRes({ tab, data: r.data }); setMsg(null); } })
+      .catch((e) => { if (alive) setMsg({ type: 'err', text: errMsg(e) }); });
+    return () => { alive = false; };
   }, [tab, from, to]);
 
   const csv = async () => {
