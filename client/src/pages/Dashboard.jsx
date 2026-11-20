@@ -19,7 +19,7 @@ const BANNER = {
   titleParts: ['Bridal Heritage Polki', '&', 'Antique', 'Gold Collection'],
   // Right-side picture: put your image path here (e.g. '/images/bridal-set.jpg' from /public, or an imported file).
   // If the file is missing (or this is ''), the gold-rings artwork shows instead.
-  image: '/hero.jpeg',
+  image: '/hero.png',
   imageAlt: 'Bridal polki necklace set',
   text: 'High-turnover festive wedding season inventory is now verified. Making charges auto-calculate based on net stone deduction and live daily bullion data.',
 };
