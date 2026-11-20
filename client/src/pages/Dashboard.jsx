@@ -15,10 +15,11 @@ import { Badge, Notice } from '../components/Bits';
 
 const BANNER = {
   badge: 'BIS 916 Hallmarked & IGI Certified Countertops',
-  title: 'Bridal Heritage Polki & Antique Gold Collection',
+  // Heading is split so the gold words can be coloured: [line 1, gold &, line 2, gold words]
+  titleParts: ['Bridal Heritage Polki', '&', 'Antique', 'Gold Collection'],
   // Right-side picture: put your image path here (e.g. '/images/bridal-set.jpg' from /public, or an imported file).
-  // Leave empty ('') to show the gold-rings artwork instead.
-  image: '',
+  // If the file is missing (or this is ''), the gold-rings artwork shows instead.
+  image: '/hero.jpeg',
   imageAlt: 'Bridal polki necklace set',
   text: 'High-turnover festive wedding season inventory is now verified. Making charges auto-calculate based on net stone deduction and live daily bullion data.',
 };
@@ -27,6 +28,7 @@ const MAROON = '#4a1424';
 const DEEP = '#2f0b15';
 const GOLD = '#b8892f';
 const SILVER = '#b5c3d6';
+const goldText = { background: 'linear-gradient(90deg,#f3dc9a,#d9a441)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' };
 const serif = { fontFamily: "'Playfair Display', Georgia, serif" };
 const card = 'rounded-2xl border border-[#efe6d6] bg-white shadow-[0_1px_3px_rgba(74,20,36,0.06)]';
 const REFRESH_MS = 30000;
@@ -58,13 +60,20 @@ const I = {
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 100 6 3 3 0 000-6z',
   scan: 'M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M8 9v6M12 9v6M16 9v6',
   arrow: 'M5 12h14M13 6l6 6-6 6',
+  check: 'M5 12l5 5 9-10',
+  chev: 'M9 6l6 6-6 6',
   spark: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z',
 };
 
 /* ---------- KPI card: title + icon on top, value, chip / helper text below ---------- */
-function Kpi({ label, icon, value, bar, helper, chip }) {
+function Kpi({ label, icon, value, bar, helper, chip, deco }) {
   return (
-    <div className={`${card} p-4`}>
+    <div className={`${card} relative overflow-hidden p-4`}>
+      {deco && (
+        <svg className="pointer-events-none absolute bottom-0 right-2 h-14 w-28 text-[#b8892f] opacity-[0.13]" viewBox="0 0 100 50" aria-hidden="true">
+          {[8, 18, 12, 26, 20, 34, 28, 42].map((h, i) => <rect key={i} x={i * 12 + 2} y={50 - h} width="8" height={h} fill="currentColor" />)}
+        </svg>
+      )}
       <div className="flex items-start justify-between">
         <div className="text-[13px] font-bold" style={{ ...serif, color: MAROON }}>{label}</div>
         <Ico d={icon} size={15} className="text-[#b8892f]" />
@@ -78,7 +87,7 @@ function Kpi({ label, icon, value, bar, helper, chip }) {
           <div className="h-full rounded-full" style={{ width: `${Math.min(100, bar)}%`, background: GOLD }} />
         </div>
       )}
-      <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-stone-500">
+      <div className="relative mt-3 flex items-center justify-between gap-2 text-[11px] text-stone-500">
         <span>{helper}</span>
         {chip && <span className="shrink-0 rounded-full bg-[#f6ead0] px-2.5 py-1 text-[10px] font-semibold text-[#7a5a12]">{chip}</span>}
       </div>
@@ -119,31 +128,34 @@ function AreaChart({ points }) {
   );
 }
 
-/* ---------- hero artwork (concentric gold rings) ---------- */
+/* ---------- hero artwork: photo on the right, fades into maroon; rings SVG if no photo ---------- */
 function HeroArt() {
-  if (BANNER.image) {
-    return (
-      <div className="relative hidden h-44 w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-[#2a0a13] md:block">
-        <img src={BANNER.image} alt={BANNER.imageAlt} className="h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#2a0a13]/60 to-transparent" />
-      </div>
-    );
-  }
   return (
-    <div className="relative hidden h-44 w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-[#2a0a13] md:block">
-      <svg viewBox="0 0 320 176" className="absolute inset-0 h-full w-full" aria-hidden="true">
-        <g fill="none" stroke="#d9b869" strokeOpacity="0.85">
-          <circle cx="230" cy="88" r="84" strokeWidth="1.6" />
-          <circle cx="230" cy="88" r="62" strokeWidth="1" strokeDasharray="3 4" />
-          <circle cx="230" cy="88" r="40" strokeWidth="1.4" />
-          <circle cx="230" cy="88" r="18" strokeWidth="1" strokeDasharray="2 3" />
-          <path d="M146 88h168M230 4v168M170 28l120 120M290 28L170 148" strokeOpacity="0.4" strokeWidth="0.8" />
-        </g>
-      </svg>
-      <div className="absolute left-[34%] top-1/2 grid h-14 w-14 -translate-y-1/2 place-items-center rounded-full border border-[#d9b869]/50 bg-white/10 text-[#e8cf8e] backdrop-blur-sm"><Ico d={I.spark} size={22} /></div>
-      <div className="absolute inset-x-0 bottom-9 text-center text-[11px] font-bold tracking-[0.2em] text-[#f4e6c4]">POLKI &amp; JADAU</div>
-      <div className="absolute inset-x-0 bottom-5 text-center text-[8px] tracking-[0.3em] text-[#d9b869]">CERTIFIED HALLMARK 916</div>
-    </div>
+    <svg viewBox="0 0 320 176" preserveAspectRatio="xMidYMid slice" className="h-full w-full" aria-hidden="true">
+      <g fill="none" stroke="#d9b869" strokeOpacity="0.85">
+        <circle cx="230" cy="88" r="84" strokeWidth="1.6" />
+        <circle cx="230" cy="88" r="62" strokeWidth="1" strokeDasharray="3 4" />
+        <circle cx="230" cy="88" r="40" strokeWidth="1.4" />
+        <circle cx="230" cy="88" r="18" strokeWidth="1" strokeDasharray="2 3" />
+        <path d="M146 88h168M230 4v168M170 28l120 120M290 28L170 148" strokeOpacity="0.4" strokeWidth="0.8" />
+      </g>
+    </svg>
+  );
+}
+
+function HeroVisual() {
+  const [ok, setOk] = useState(Boolean(BANNER.image));
+  return (
+    <>
+      {/* full-banner background image (rings artwork if the file is missing) */}
+      <div className="absolute inset-0">
+        {ok
+          ? <img src={BANNER.image} alt={BANNER.imageAlt} onError={() => setOk(false)} className="h-full w-full object-cover object-right" />
+          : <HeroArt />}
+      </div>
+      {/* dark overlay so the text stays readable on top of the photo */}
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, rgba(47,11,21,0.6) 0%, rgba(47,11,21,0.35) 45%, rgba(47,11,21,0) 100%)' }} />
+    </>
   );
 }
 
@@ -211,44 +223,57 @@ export default function Dashboard() {
 
       {d?.alerts?.length > 0 && (
         <ul className="space-y-2" aria-label="Alerts">
-          {d.alerts.map((a, i) => (
-            <li key={i} className={`rounded-lg px-3 py-2 text-sm font-semibold ${a.level === 'error' ? 'bg-[#fbe3e3] text-[#9b1c1c]' : a.level === 'warn' ? 'bg-[#f6ead0] text-[#7a5a12]' : 'bg-[#f1ebe3] text-[#4a1424]'}`}>
-              {a.href ? <Link className="underline" to={a.href}>{a.text}</Link> : a.text}
-            </li>
-          ))}
+          {d.alerts.map((a, i) => {
+            const tone = a.level === 'error' ? 'bg-[#fbe3e3] text-[#9b1c1c]' : a.level === 'warn' ? 'bg-[#f6ead0] text-[#7a5a12]' : 'bg-[#dcf3e4] text-[#1f7a45]';
+            const cls = 'flex items-center gap-3 rounded-xl border border-[#efe6d6] bg-white/80 px-3 py-2.5 text-sm font-semibold text-stone-700';
+            const body = (
+              <>
+                <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${tone}`}><Ico d={a.level === 'error' || a.level === 'warn' ? I.bell : I.check} size={13} /></span>
+                <span className="flex-1">{a.text}</span>
+                {a.href && <Ico d={I.chev} size={14} className="text-stone-400" />}
+              </>
+            );
+            return <li key={i}>{a.href ? <Link to={a.href} className={`${cls} hover:bg-white`}>{body}</Link> : <div className={cls}>{body}</div>}</li>;
+          })}
         </ul>
       )}
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi label="Today's realized sales" icon={I.cash} value={d?.sales ? money(d.sales.total) : '—'}
+        <Kpi deco label="Today's realized sales" icon={I.cash} value={d?.sales ? money(d.sales.total) : '—'}
           helper="All counter tills combined"
           chip={<Link to={d ? `/invoices?from=${d.today}&to=${d.today}` : '/invoices'}>{bills} receipt{bills === 1 ? '' : 's'}</Link>} />
-        <Kpi label="Cash & digital realization" icon={I.wallet} value={d?.sales ? money(collected) : '—'}
+        <Kpi deco label="Cash & digital realization" icon={I.wallet} value={d?.sales ? money(collected) : '—'}
           bar={d?.sales?.total ? (collected / d.sales.total) * 100 : 0}
           helper={d?.sales?.byMode?.length ? d.sales.byMode.map((m) => <span key={m.mode} className="mr-2 capitalize">{m.mode} <b>{money(m.amount)}</b></span>) : 'Nothing yet today.'} />
         <Kpi label="Total gold outflow" icon={I.hourglass} value={d?.sales?.goldGrams !== undefined ? '' : '—'}
           helper="Gold sold today"
           chip={`${Number(d?.sales?.goldGrams || 0).toFixed(3)} g net`} />
-        <Kpi label="Active stock valuation" icon={I.gem} value={stockValue !== null ? money(stockValue) : '—'}
+        <Kpi deco label="Active stock valuation" icon={I.gem} value={stockValue !== null ? money(stockValue) : '—'}
           helper={d?.stock && Object.keys(d.stock.byStatus || {}).length
             ? Object.entries(d.stock.byStatus).map(([k, n]) => <Link key={k} to={`/inventory?status=${k}`} className="mr-2 inline-flex items-center gap-1"><Badge status={k} /><b>{n}</b></Link>)
             : 'Calculated at current spot rates'} />
       </div>
 
       {/* Hero banner */}
-      <div className="relative overflow-hidden rounded-2xl p-6 md:p-8" style={{ background: `linear-gradient(120deg, ${MAROON} 0%, ${DEEP} 100%)` }}>
-        <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-          <div className="max-w-xl">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-semibold text-[#f1e3bd]"><Ico d={I.shield} size={12} />{BANNER.badge}</span>
-            <h2 className="mt-4 text-3xl font-bold leading-tight text-white" style={serif}>{BANNER.title}</h2>
-            <p className="mt-3 text-sm leading-relaxed text-white/70">{BANNER.text}</p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Link to="/inventory" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#2f0b15]" style={{ background: '#c9a24a' }}><Ico d={I.eye} />Inspect Vault Tray</Link>
-              <Link to="/labels" className="flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/15"><Ico d={I.scan} />Print Barcode Tags</Link>
-            </div>
+      <div className="relative overflow-hidden rounded-2xl" style={{ background: `linear-gradient(120deg, ${MAROON} 0%, ${DEEP} 100%)` }}>
+        <HeroVisual />
+        <div className="relative max-w-xl p-6 md:px-8 md:py-7">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-semibold text-[#f1e3bd]"><Ico d={I.shield} size={12} />{BANNER.badge}</span>
+          <h2 className="mt-4 text-3xl font-bold leading-[1.15] text-white md:text-[2.15rem]" style={serif}>
+            {BANNER.titleParts[0]} <span style={goldText}>{BANNER.titleParts[1]}</span>
+            <br />{BANNER.titleParts[2]} <span style={goldText}>{BANNER.titleParts[3]}</span>
+          </h2>
+          <div className="mt-3 flex items-center gap-2" aria-hidden="true">
+            <span className="h-px w-16 bg-gradient-to-r from-transparent to-[#d9b869]" />
+            <span className="h-1.5 w-1.5 rotate-45 border border-[#d9b869]" />
+            <span className="h-px w-40 bg-gradient-to-r from-[#d9b869] to-transparent" />
           </div>
-          <HeroArt />
+          <p className="mt-3 text-sm leading-relaxed text-white/80">{BANNER.text}</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link to="/inventory" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#2f0b15]" style={{ background: '#d9a441' }}><Ico d={I.eye} />Inspect Vault Tray</Link>
+            <Link to="/labels" className="flex items-center gap-2 rounded-xl border border-[#d9b869]/60 px-4 py-2.5 text-sm font-semibold text-[#f1e3bd] hover:bg-white/10"><Ico d={I.scan} />Print Barcode Tags</Link>
+          </div>
         </div>
       </div>
 
