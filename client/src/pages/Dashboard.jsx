@@ -19,7 +19,7 @@ const BANNER = {
   titleParts: ['Bridal Heritage Polki', '&', 'Antique', 'Gold Collection'],
   // Right-side picture: put your image path here (e.g. '/images/bridal-set.jpg' from /public, or an imported file).
   // If the file is missing (or this is ''), the gold-rings artwork shows instead.
-  image: '/hero.jpeg',
+  image: '/hero.png',
   imageAlt: 'Bridal polki necklace set',
   text: 'High-turnover festive wedding season inventory is now verified. Making charges auto-calculate based on net stone deduction and live daily bullion data.',
 };
@@ -144,13 +144,17 @@ function HeroArt() {
 }
 
 function HeroVisual() {
-  const [ok, setOk] = useState(Boolean(BANNER.image));
+  // Tries BANNER.image first, then the same name with other common extensions, so a .png/.jpg/.jpeg/.webp all work.
+  const base = (BANNER.image || '/hero.png').replace(/\.\w+$/, '');
+  const tries = [...new Set([BANNER.image, ...['png', 'jpg', 'jpeg', 'webp'].map((e) => `${base}.${e}`)].filter(Boolean))];
+  const [i, setI] = useState(0);
+  const src = tries[i];
   return (
     <>
-      {/* full-banner background image (rings artwork if the file is missing) */}
+      {/* full-banner background image (rings artwork if no file is found) */}
       <div className="absolute inset-0">
-        {ok
-          ? <img src={BANNER.image} alt={BANNER.imageAlt} onError={() => setOk(false)} className="h-full w-full object-cover object-right" />
+        {src
+          ? <img key={src} src={src} alt={BANNER.imageAlt} onError={() => setI((n) => n + 1)} className="h-full w-full object-cover object-right" />
           : <HeroArt />}
       </div>
       {/* dark overlay so the text stays readable on top of the photo */}
