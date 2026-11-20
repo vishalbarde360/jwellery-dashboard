@@ -16,6 +16,10 @@ import { Badge, Notice } from '../components/Bits';
 const BANNER = {
   badge: 'BIS 916 Hallmarked & IGI Certified Countertops',
   title: 'Bridal Heritage Polki & Antique Gold Collection',
+  // Right-side picture: put your image path here (e.g. '/images/bridal-set.jpg' from /public, or an imported file).
+  // Leave empty ('') to show the gold-rings artwork instead.
+  image: '',
+  imageAlt: 'Bridal polki necklace set',
   text: 'High-turnover festive wedding season inventory is now verified. Making charges auto-calculate based on net stone deduction and live daily bullion data.',
 };
 
@@ -56,38 +60,6 @@ const I = {
   arrow: 'M5 12h14M13 6l6 6-6 6',
   spark: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z',
 };
-
-/* ---------- top bullion ticker ---------- */
-function Ticker({ list }) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1">
-      <span className="flex items-center gap-2 text-[11px] font-bold tracking-wide text-stone-600">
-        <span className="inline-block h-2 w-2 rounded-full" style={{ background: GOLD }} />MCX LIVE BULLION
-      </span>
-      {(list || []).map((r) => {
-        const ch = Number(r.change);
-        return (
-          <Link key={r.metal + r.purity} to="/rates" title="Adjust rate"
-            className="flex items-center gap-2 rounded-md bg-[#f6ead0] px-2.5 py-1 text-xs transition hover:bg-[#f0dfb9]">
-            <b className="text-[10px] uppercase text-[#7a5a12]">{r.metal} {r.purity}</b>
-            <span className="font-extrabold" style={{ ...serif, color: MAROON }}>{money(r.perGram)}</span>
-            <span className="text-[10px] text-stone-500">perg</span>
-            {Number.isFinite(ch) && r.change !== undefined && (
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${ch >= 0 ? 'bg-[#dcf3e4] text-[#1f7a45]' : 'bg-[#fbe3e3] text-[#9b1c1c]'}`}>
-                {ch >= 0 ? '+' : ''}{ch.toFixed(2)}%
-              </span>
-            )}
-            {r.today === false && <span className="text-[10px] font-semibold text-[#9b1c1c]">not updated today</span>}
-          </Link>
-        );
-      })}
-      <span className="ml-auto flex items-center gap-3 text-[10px] text-stone-500">
-        <span>Session ID: <b className="text-stone-700">ATELIER-01</b></span>
-        <span className="rounded-full border border-[#e8d9b4] bg-[#fbf1d8] px-3 py-1 font-semibold text-[#7a5a12]">Cashier Till Online</span>
-      </span>
-    </div>
-  );
-}
 
 /* ---------- KPI card: title + icon on top, value, chip / helper text below ---------- */
 function Kpi({ label, icon, value, bar, helper, chip }) {
@@ -149,6 +121,14 @@ function AreaChart({ points }) {
 
 /* ---------- hero artwork (concentric gold rings) ---------- */
 function HeroArt() {
+  if (BANNER.image) {
+    return (
+      <div className="relative hidden h-44 w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-[#2a0a13] md:block">
+        <img src={BANNER.image} alt={BANNER.imageAlt} className="h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#2a0a13]/60 to-transparent" />
+      </div>
+    );
+  }
   return (
     <div className="relative hidden h-44 w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-[#2a0a13] md:block">
       <svg viewBox="0 0 320 176" className="absolute inset-0 h-full w-full" aria-hidden="true">
@@ -198,10 +178,8 @@ export default function Dashboard() {
   const bills = d?.sales?.count ?? 0;
 
   return (
-    <div className="space-y-5 bg-[#faf5ec] p-4 md:p-6">
+    <div className="space-y-5">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&display=swap');`}</style>
-
-      <Ticker list={d?.rates?.list} />
 
       {/* Header card */}
       <div className={`${card} p-5`}>
