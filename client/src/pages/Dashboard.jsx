@@ -19,7 +19,7 @@ const BANNER = {
   titleParts: ['Bridal Heritage Polki', '&', 'Antique', 'Gold Collection'],
   // Right-side picture: put your image path here (e.g. '/images/bridal-set.jpg' from /public, or an imported file).
   // If the file is missing (or this is ''), the gold-rings artwork shows instead.
-  image: '/hero.png',
+  image: '/hero.jpeg',
   imageAlt: 'Bridal polki necklace set',
   text: 'High-turnover festive wedding season inventory is now verified. Making charges auto-calculate based on net stone deduction and live daily bullion data.',
 };
@@ -75,11 +75,11 @@ function Kpi({ label, icon, value, bar, helper, chip, deco }) {
         </svg>
       )}
       <div className="flex items-start justify-between">
-        <div className="text-[13px] font-bold" style={{ ...serif, color: MAROON }}>{label}</div>
+        <div className="text-[13px] font-bold" style={{ color: MAROON }}>{label}</div>
         <Ico d={icon} size={15} className="text-[#b8892f]" />
       </div>
       <div className="mt-3 flex items-baseline justify-between gap-2">
-        <div className="text-2xl font-extrabold" style={{ ...serif, color: MAROON }}>{value}</div>
+        <div className="text-2xl font-extrabold" style={{ color: MAROON }}>{value}</div>
         {bar !== undefined && <span className="font-mono text-[10px] text-stone-500">{bar.toFixed(2)} %</span>}
       </div>
       {bar !== undefined && (
@@ -167,6 +167,16 @@ export default function Dashboard() {
   const [msg, setMsg] = useState(null);
   const [range, setRange] = useState('today');
 
+  // Playfair Display is used only for the hero banner heading (the image banner). Everything else keeps the app font.
+  useEffect(() => {
+    if (document.getElementById('dash-font')) return;
+    const l = document.createElement('link');
+    l.id = 'dash-font';
+    l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&display=swap';
+    document.head.appendChild(l);
+  }, []);
+
   useEffect(() => {
     let alive = true;
     const load = () =>
@@ -191,14 +201,13 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&display=swap');`}</style>
 
       {/* Header card */}
       <div className={`${card} p-5`}>
         <div className="flex items-center gap-3">
           <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-[#e8cf8e]" style={{ background: MAROON }}><Ico d={I.spark} size={20} /></div>
           <div>
-            <h1 className="text-2xl font-extrabold leading-tight" style={{ ...serif, color: MAROON }}>
+            <h1 className="text-2xl font-extrabold leading-tight" style={{ color: MAROON }}>
               Executive Atelier Dashboard
               {d?.shop?.branch && <span className="ml-2 rounded bg-[#f6ead0] px-2 py-0.5 align-middle font-sans text-[10px] font-bold text-[#7a5a12]">{d.shop.branch}</span>}
             </h1>
@@ -283,7 +292,7 @@ export default function Dashboard() {
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#f6ead0] text-[#7a5a12]"><Ico d={I.pie} size={18} /></div>
-              <div><h2 className="text-lg font-bold leading-tight" style={{ ...serif, color: MAROON }}>Sales Composition &amp; Volume</h2><p className="text-xs text-stone-500">Sales flow across gold, diamond, and silver</p></div>
+              <div><h2 className="text-lg font-bold leading-tight" style={{ color: MAROON }}>Sales Composition &amp; Volume</h2><p className="text-xs text-stone-500">Sales flow across gold, diamond, and silver</p></div>
             </div>
             <div className="flex rounded-xl border border-[#efe6d6] bg-[#faf4e8] p-0.5 text-xs font-semibold">
               {TABS.map(([label, key]) => (
@@ -309,7 +318,7 @@ export default function Dashboard() {
               {mix.map((m) => (
                 <div key={m.name} className="rounded-xl bg-[#faf4e8] p-3">
                   <div className="flex items-center justify-between text-[11px] text-stone-500"><span>{m.name}</span><b style={{ color: MAROON }}>{mixTotal ? Math.round((m.amount / mixTotal) * 100) : 0}%</b></div>
-                  <div className="mt-1 text-lg font-extrabold" style={{ ...serif, color: MAROON }}>{money(m.amount)}</div>
+                  <div className="mt-1 text-lg font-extrabold" style={{ color: MAROON }}>{money(m.amount)}</div>
                 </div>
               ))}
             </div>
@@ -325,7 +334,7 @@ export default function Dashboard() {
           <div className="mb-3 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2.5">
               <Ico d={I.list} size={18} className="mt-1 text-[#7a5a12]" />
-              <h2 className="text-lg font-bold leading-tight" style={{ ...serif, color: MAROON }}>Real-Time Transactions</h2>
+              <h2 className="text-lg font-bold leading-tight" style={{ color: MAROON }}>Real-Time Transactions</h2>
             </div>
             <Link to="/invoices" className="flex shrink-0 items-center gap-1 text-xs font-bold" style={{ color: MAROON }}>View All <Ico d={I.arrow} size={12} /></Link>
           </div>
@@ -361,7 +370,7 @@ export default function Dashboard() {
       {/* Stock status */}
       {rows.length > 0 && (
         <div className={`${card} overflow-x-auto p-5`}>
-          <div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-bold" style={{ ...serif, color: MAROON }}>Stock Status</h2><Link to="/inventory" className="text-xs font-bold" style={{ color: MAROON }}>Full Ledger ›</Link></div>
+          <div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-bold" style={{ color: MAROON }}>Stock Status</h2><Link to="/inventory" className="text-xs font-bold" style={{ color: MAROON }}>Full Ledger ›</Link></div>
           <table className="w-full text-left text-sm">
             <thead><tr className="border-b border-[#ece2d0] text-xs text-stone-500">{['Category', 'Pieces', 'Gross g', 'Net g', 'Metal value today', ...(hasCost ? ['Cost'] : [])].map((h) => <th key={h} className="p-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>
