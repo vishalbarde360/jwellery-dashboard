@@ -134,10 +134,13 @@ export default function RegisterProduct() {
         <h1 className="text-2xl font-extrabold text-ink">Register product</h1>
         <Notice msg={msg} />
 
-        <section className="card p-4">
-          <div className="label">Category</div>
-          <div role="radiogroup" aria-label="Category" className="flex flex-wrap gap-2">
-            {COLLECTIONS.map(([k, l]) => <button type="button" role="radio" aria-checked={f.category === k} key={k} onClick={() => chooseCategory(k)} className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${f.category === k ? 'border-ink bg-ink text-white' : 'border-paper-line bg-white text-slate-700'}`}>{l}</button>)}
+        <section className="card flex items-center gap-4 overflow-x-auto px-4 py-3">
+          <div id="cat-label" className="label !mb-0 shrink-0 whitespace-nowrap font-extrabold text-ink">Category</div>
+          <div role="radiogroup" aria-labelledby="cat-label" className="inline-flex shrink-0 gap-1 rounded-lg border border-paper-line bg-slate-50 p-1">
+            {COLLECTIONS.map(([k, l]) => (
+              <button type="button" role="radio" aria-checked={f.category === k} key={k} onClick={() => chooseCategory(k)}
+                className={`whitespace-nowrap rounded-md px-5 py-1.5 text-sm font-semibold transition ${f.category === k ? 'bg-ink text-white shadow-sm' : 'text-slate-700 hover:bg-white'}`}>{l}</button>
+            ))}
           </div>
         </section>
 
