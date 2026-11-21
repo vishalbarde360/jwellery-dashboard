@@ -79,7 +79,10 @@ router.patch('/:id', need('products.write'), async (req, res) => {
 router.post('/register', need('products.write'), async (req, res, next) => {
   try {
     const { productId, product: p = {}, piece } = req.body;
-    if (piece && !can(req.user.role, 'stock.receive')) throw new HttpError(403, "You don't have permission: stock.receive");
+    // One piece (`piece`) or many identical-type pieces (`pieces`), all saved together or not at all.
+    const list = Array.isArray(req.body.pieces) ? req.body.pieces : piece ? [piece] : [];
+    if (list.length > 500) throw new HttpError(400, 'Register at most 500 pieces at a time');
+    if (list.length && !can(req.user.role, 'stock.receive')) throw new HttpError(403, "You don't have permission: stock.receive");
 
     const save = () => runInTransaction(async (session) => {
       let product;
@@ -101,28 +104,33 @@ router.post('/register', need('products.write'), async (req, res, next) => {
         product = created.toObject();
       }
 
-      let item = null;
-      if (piece) {
-        const barcode = String(piece.barcode || '').trim();
-        if (!barcode) throw new HttpError(400, 'Give the piece a barcode');
-        const gross = Number(piece.grossWeight);
-        const stone = Number(piece.stoneWeight) || 0;
-        if (!(gross > 0)) throw new HttpError(400, 'Enter the gross weight');
-        if (stone < 0 || stone > gross) throw new HttpError(400, 'Stone weight cannot be more than gross weight');
-        const attrs = product.category && CATEGORIES[product.category] ? validateAttrs(product.category, piece.attrs) : {};
-        [item] = await Item.create([{
-          product: product._id, barcode, name: piece.name || product.name, sku: piece.sku || product.sku || undefined,
-          category: product.category, attrs, metal: product.metal, purity: product.purity, hsn: product.hsn,
-          grossWeight: gross, stoneWeight: stone, netWeight: gross - stone, stoneValue: Number(piece.stoneValue) || 0,
-          costPrice: can(req.user.role, 'cost.read') ? Number(piece.costPrice) || 0 : 0,
-          priceMethod: piece.priceMethod ?? product.defaultPriceMethod, fixedPrice: Number(piece.fixedPrice) || 0,
-          wastagePercent: piece.wastagePercent ?? product.defaultWastagePercent,
-          makingType: piece.makingType ?? product.defaultMakingType, makingValue: piece.makingValue ?? product.defaultMakingValue,
-          branch: req.user.branch, status: 'available',
-        }], { session });
-        await StockMovement.create([{ item: item._id, type: 'purchase', toStatus: 'available', by: req.user._id, note: 'Opening stock (registered directly)' }], { session });
+      let made = [];
+      if (list.length) {
+        const barcodes = list.map((x) => String(x.barcode || '').trim());
+        if (barcodes.some((b) => !b)) throw new HttpError(400, 'Give every piece a barcode');
+        if (new Set(barcodes).size !== barcodes.length) throw new HttpError(400, 'Two pieces have the same barcode. Every piece needs its own barcode');
+        const docs = list.map((pc, idx) => {
+          const gross = Number(pc.grossWeight);
+          const stone = Number(pc.stoneWeight) || 0;
+          if (!(gross > 0)) throw new HttpError(400, 'Enter the gross weight');
+          if (stone < 0 || stone > gross) throw new HttpError(400, 'Stone weight cannot be more than gross weight');
+          const attrs = product.category && CATEGORIES[product.category] ? validateAttrs(product.category, pc.attrs) : {};
+          return {
+            product: product._id, barcode: barcodes[idx], name: pc.name || product.name, sku: pc.sku || product.sku || undefined,
+            category: product.category, attrs, metal: product.metal, purity: product.purity, hsn: product.hsn,
+            grossWeight: gross, stoneWeight: stone, netWeight: gross - stone, stoneValue: Number(pc.stoneValue) || 0,
+            costPrice: can(req.user.role, 'cost.read') ? Number(pc.costPrice) || 0 : 0,
+            priceMethod: pc.priceMethod ?? product.defaultPriceMethod, fixedPrice: Number(pc.fixedPrice) || 0,
+            wastagePercent: pc.wastagePercent ?? product.defaultWastagePercent,
+            makingType: pc.makingType ?? product.defaultMakingType, makingValue: pc.makingValue ?? product.defaultMakingValue,
+            branch: req.user.branch, status: 'available',
+          };
+        });
+        made = await Item.create(docs, { session, ordered: true });
+        await StockMovement.create(made.map((it) => ({ item: it._id, type: 'purchase', toStatus: 'available', by: req.user._id, note: 'Opening stock (registered directly)' })), { session, ordered: true });
       }
-      return { product, item: item && item.toObject() };
+      const items = made.map((it) => it.toObject());
+      return { product, item: items[0] || null, items };
     });
 
     let out;
@@ -133,7 +141,7 @@ router.post('/register', need('products.write'), async (req, res, next) => {
         if (!retry) throw e;
       }
     }
-    audit(req, 'product.register', 'Product', String(out.product._id), { barcode: out.item?.barcode });
+    audit(req, 'product.register', 'Product', String(out.product._id), { barcode: out.item?.barcode, pieces: out.items?.length || 0 });
     res.status(201).json(out);
   } catch (e) {
     if (e.code === 11000) return res.status(409).json({ message: dupMessage(e) });
