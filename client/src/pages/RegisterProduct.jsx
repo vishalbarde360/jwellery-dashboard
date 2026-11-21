@@ -93,10 +93,10 @@ export default function RegisterProduct() {
   const artificial = f.category === 'special_design';
   const methods = artificial ? METHODS.filter(([k]) => k === 'fixed') : METHODS;
   const typeList = baseTypes.some((t) => t.key === f.type) || !f.type ? baseTypes : [...baseTypes, { key: f.type, label: f.type }];
-  const nextSku = locked ? f.sku : makeSku(products, f.category, f.type);
   const subs = typeList.find((t) => t.key === f.type)?.subs || [];
   const purityOpts = (() => { const o = PURITY_OPTS[f.metal] || []; return !f.purity || o.some(([v]) => v === f.purity) ? o : [...o, [f.purity, f.purity]]; })();
   const locked = !!f.productId;
+  const nextSku = locked ? f.sku : makeSku(products, f.category, f.type);
   // Existing products shown for the selected category only
   const visible = products.filter((p) => (f.category === 'special_design' ? p.collection === 'special_design' : p.metal === f.category && p.collection !== 'special_design'));
   const prodOpt = (p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` (${p.sku})` : ''}{p.purity ? ` - ${p.purity}` : ''}</option>;
