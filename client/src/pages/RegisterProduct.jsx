@@ -147,32 +147,15 @@ export default function RegisterProduct() {
     setSaving(true); setMsg(null);
     const num = (v) => (v === '' ? 0 : Number(v));
     try {
-      // Get the latest product list so the new SKU number is based on what is really saved.
-      let list = products;
-      if (!f.productId) {
-        try { list = (await api.get('/products')).data; setProducts(list); } catch { /* use the list already loaded */ }
-      }
-      // If the server says the SKU is already taken, go to the next number and try again.
-      const taken = [];
-      let sku = f.sku;
-      let data = null;
-      for (let attempt = 0; attempt < 10; attempt++) {
-        if (!f.productId) sku = makeSku([...list, ...taken.map((s) => ({ sku: s }))], f.category, f.type);
-        try {
-          ({ data } = await api.post('/products/register', {
-            productId: f.productId || undefined,
-            product: f.productId ? undefined : { name: f.name, sku, category: f.type, subType: f.subType || undefined, collection: f.category, metal: f.metal, purity: f.purity, defaultPriceMethod: f.defaultPriceMethod, defaultWastagePercent: num(f.defaultWastagePercent), defaultMakingType: f.defaultMakingType, defaultMakingValue: num(f.defaultMakingValue) },
-            piece: withPiece ? { barcode: piece.barcode, name: piece.name || undefined, grossWeight: gross, stoneWeight: stone, stoneValue: num(piece.stoneValue), costPrice: num(piece.costPrice), fixedPrice: num(piece.fixedPrice), attrs: piece.attrs } : undefined,
-          }));
-          break;
-        } catch (x) {
-          if (!f.productId && attempt < 9 && /sku/i.test(errMsg(x))) { taken.push(sku); continue; }
-          throw x;
-        }
-      }
+      // The server makes the SKU for a new product (category-type-number), so it can never clash.
+      const { data } = await api.post('/products/register', {
+        productId: f.productId || undefined,
+        product: f.productId ? undefined : { name: f.name, category: f.type, subType: f.subType || undefined, collection: f.category, metal: f.metal, purity: f.purity, defaultPriceMethod: f.defaultPriceMethod, defaultWastagePercent: num(f.defaultWastagePercent), defaultMakingType: f.defaultMakingType, defaultMakingValue: num(f.defaultMakingValue) },
+        piece: withPiece ? { barcode: piece.barcode, name: piece.name || undefined, grossWeight: gross, stoneWeight: stone, stoneValue: num(piece.stoneValue), costPrice: num(piece.costPrice), fixedPrice: num(piece.fixedPrice), attrs: piece.attrs } : undefined,
+      });
       setSaved(data);
       setProducts((ps) => (ps.some((p) => p._id === data.product._id) ? ps : [...ps, data.product]));
-      setF((cur) => ({ ...cur, productId: data.product._id, sku: data.product.sku || sku }));
+      setF((cur) => ({ ...cur, productId: data.product._id, sku: data.product.sku || cur.sku }));
       setPiece(blankPiece);
       setMsg({ type: 'ok', text: data.item ? `Registered ${data.item.barcode}. You can register the next piece of the same product, or print its label.` : 'Product saved.' });
     } catch (x) { setMsg({ type: 'err', text: errMsg(x) }); } finally { setSaving(false); }
