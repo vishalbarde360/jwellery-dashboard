@@ -23,7 +23,7 @@ const SIZES = [25, 50, 100];
 const GROUPS = [
   { key: 'gold', label: 'Gold', color: '#b8892f', filter: 'gold', pred: (r) => r.metal === 'gold' },
   { key: 'silver', label: 'Silver', color: '#8fa0b8', filter: 'silver', pred: (r) => r.metal === 'silver' },
-  { key: 'artificial', label: 'Artificial', color: '#9b2f5b', filter: 'other', pred: (r) => r.metal !== 'gold' && r.metal !== 'silver' },
+ 
 ];
 const fmtG = (n) => (n >= 1000 ? `${(n / 1000).toFixed(3)} kg` : `${n.toFixed(3)} g`);
 
