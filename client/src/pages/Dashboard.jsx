@@ -41,6 +41,44 @@ const compact = (n) => {
   return `₹${n}`;
 };
 
+/* ---------- chart helpers ---------- */
+// Round the top of the y-axis up to a clean number (1, 2, 4, 8, 10 x power of ten).
+const niceMax = (v) => {
+  if (v <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  const n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 4 : n <= 8 ? 8 : 10) * p;
+};
+// Read the hour (0-23) out of labels like "10 AM", "10:00", "14".
+const hourOf = (label) => {
+  const m = String(label).trim().match(/^(\d{1,2})(?::\d{2})?\s*([AaPp][Mm])?/);
+  if (!m) return null;
+  let h = Number(m[1]);
+  if (m[2]) {
+    const pm = m[2].toLowerCase() === 'pm';
+    if (pm && h < 12) h += 12;
+    if (!pm && h === 12) h = 0;
+  }
+  return h >= 0 && h <= 23 ? h : null;
+};
+const hourLabel = (h) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
+// Today view: always show the whole working day (9 AM to 9 PM, wider if there are earlier/later sales),
+// with 0 for hours that have no sale yet, so earlier sales never drop off when a new one arrives.
+const fullDay = (points) => {
+  if (!points.length) return points;
+  const hrs = points.map((p) => hourOf(p.label));
+  if (hrs.some((h) => h === null)) return points;
+  const sums = {};
+  const lists = {};
+  points.forEach((p, i) => {
+    sums[hrs[i]] = (sums[hrs[i]] || 0) + Number(p.value || 0);
+    lists[hrs[i]] = [...(lists[hrs[i]] || []), ...(p.sales || [])];
+  });
+  const start = Math.min(9, ...hrs);
+  const end = Math.max(21, ...hrs);
+  return Array.from({ length: end - start + 1 }, (_, k) => ({ label: hourLabel(start + k), value: sums[start + k] || 0, sales: lists[start + k] || [] }));
+};
+
 /* ---------- small inline icons (no extra package needed) ---------- */
 const Ico = ({ d, size = 14, className = '' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true"><path d={d} /></svg>
@@ -95,36 +133,89 @@ function Kpi({ label, icon, value, bar, helper, chip, deco }) {
   );
 }
 
-/* ---------- sales area chart ---------- */
+/* ---------- sales area chart: smooth line, clean axis, hover shows the exact time and amount ---------- */
 function AreaChart({ points }) {
-  const W = 640, H = 200, L = 48, R = 16, T = 30, B = 28;
-  const max = Math.max(...points.map((p) => p.value), 1);
+  const [hov, setHov] = useState(null);
+  const W = 640, H = 220, L = 52, R = 16, T = 24, B = 30;
+  const top = niceMax(Math.max(...points.map((p) => Number(p.value) || 0), 0));
   const step = (W - L - R) / Math.max(points.length - 1, 1);
-  const xy = points.map((p, i) => [L + i * step, H - B - (p.value / max) * (H - T - B)]);
-  const line = xy.map(([x, y]) => `${x},${y}`).join(' ');
-  const area = `${L},${H - B} ${line} ${L + (points.length - 1) * step},${H - B}`;
+  const X = (i) => L + i * step;
+  const Y = (v) => H - B - ((Number(v) || 0) / top) * (H - T - B);
+  const xy = points.map((p, i) => [X(i), Y(p.value)]);
+  const curve = xy.map(([x, y], i) => {
+    if (!i) return `M${x},${y}`;
+    const [px, py] = xy[i - 1];
+    const cx = (px + x) / 2;
+    return `C${cx},${py} ${cx},${y} ${x},${y}`;
+  }).join(' ');
+  const area = `${curve} L${X(points.length - 1)},${H - B} L${L},${H - B} Z`;
   const peak = points.reduce((a, p, i) => (p.value > points[a].value ? i : a), 0);
-  const [px, py] = xy[peak];
-  const px0 = Math.min(Math.max(px, L + 70), W - R - 70);
+  const every = points.length > 14 ? 3 : points.length > 8 ? 2 : 1;
+
+  const onMove = (clientX, el) => {
+    const r = el.getBoundingClientRect();
+    const x = ((clientX - r.left) / r.width) * W;
+    setHov(Math.min(points.length - 1, Math.max(0, Math.round((x - L) / step))));
+  };
+
+  const hp = hov !== null ? points[hov] : null;
+  const [hx, hy] = hov !== null ? xy[hov] : [0, 0];
+  const short = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+  const list = hp ? (hp.sales || []).slice(0, 4) : [];
+  const more = hp ? (hp.sales || []).length - list.length : 0;
+  const noDetail = hp && hp.value > 0 && !(hp.sales || []).length;
+  const bw = 210;
+  const bh = 42 + (list.length ? list.length * 17 + 2 : 0) + (more > 0 ? 15 : 0) + (noDetail ? 17 : 0);
+  const tx = Math.min(Math.max(hx - bw / 2, L), W - R - bw);
+  const ty = Math.min(hy - bh - 12 < 2 ? hy + 12 : hy - bh - 12, H - bh - 2);
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Sales graph">
-      <defs>
-        <linearGradient id="areaFill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor={GOLD} stopOpacity="0.4" />
-          <stop offset="1" stopColor={GOLD} stopOpacity="0.03" />
-        </linearGradient>
-      </defs>
-      {[0, 1, 2, 3].map((i) => {
-        const y = T + i * ((H - T - B) / 3);
-        return <g key={i}><line x1={L} x2={W - R} y1={y} y2={y} stroke="#efe6d6" strokeDasharray="3 4" /><text x={L - 6} y={y + 3} textAnchor="end" fontSize="9" fill="#9a8f7e">{compact(max - (i * max) / 3)}</text></g>;
-      })}
-      <polygon points={area} fill="url(#areaFill)" />
-      <polyline points={line} fill="none" stroke={MAROON} strokeWidth="1.8" />
-      {xy.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3.5" fill="#fff" stroke={MAROON} strokeWidth="1.8" />)}
-      <rect x={px0 - 68} y={Math.max(py - 26, 2)} width="136" height="18" rx="4" fill="#fff" stroke="#e2d5bc" />
-      <text x={px0} y={Math.max(py - 26, 2) + 12.5} textAnchor="middle" fontSize="10" fontWeight="700" fill={MAROON}>Peak: {compact(points[peak].value)} at {points[peak].label}</text>
-      {points.map((p, i) => (points.length <= 7 || i % 2 === 0) && <text key={i} x={xy[i][0]} y={H - 8} textAnchor="middle" fontSize="9" fill="#9a8f7e">{p.label}</text>)}
-    </svg>
+    <div>
+      {points[peak].value > 0 && (
+        <div className="mb-1 text-right text-[11px] text-stone-500">Peak <b style={{ color: MAROON }}>{compact(points[peak].value)}</b> at <b style={{ color: MAROON }}>{points[peak].label}</b></div>
+      )}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full touch-pan-y" role="img" aria-label="Sales graph"
+        onMouseMove={(e) => onMove(e.clientX, e.currentTarget)} onMouseLeave={() => setHov(null)}
+        onTouchStart={(e) => onMove(e.touches[0].clientX, e.currentTarget)} onTouchMove={(e) => onMove(e.touches[0].clientX, e.currentTarget)}>
+        <defs>
+          <linearGradient id="areaFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={GOLD} stopOpacity="0.42" />
+            <stop offset="1" stopColor={GOLD} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0, 1, 2, 3, 4].map((i) => {
+          const y = T + i * ((H - T - B) / 4);
+          return (
+            <g key={i}>
+              <line x1={L} x2={W - R} y1={y} y2={y} stroke={i === 4 ? '#d9cdb4' : '#efe6d6'} strokeDasharray={i === 4 ? '' : '3 4'} />
+              <text x={L - 8} y={y + 3} textAnchor="end" fontSize="10" fill="#8a7f6e">{compact(top - (i * top) / 4)}</text>
+            </g>
+          );
+        })}
+        <path d={area} fill="url(#areaFill)" />
+        <path d={curve} fill="none" stroke={MAROON} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((p, i) => p.value > 0 && <circle key={i} cx={xy[i][0]} cy={xy[i][1]} r="3.5" fill="#fff" stroke={MAROON} strokeWidth="2" />)}
+        {points.map((p, i) => i % every === 0 && <text key={i} x={X(i)} y={H - 10} textAnchor="middle" fontSize="10" fill="#8a7f6e">{p.label}</text>)}
+        {hp && (
+          <g pointerEvents="none">
+            <line x1={hx} x2={hx} y1={T} y2={H - B} stroke={GOLD} strokeDasharray="3 3" />
+            <circle cx={hx} cy={hy} r="5.5" fill={MAROON} stroke="#fff" strokeWidth="2" />
+            <rect x={tx} y={ty} width={bw} height={bh} rx="8" fill="#fff" stroke="#e2d5bc" />
+            <text x={tx + 10} y={ty + 17} fontSize="11" fontWeight="600" fill="#8a7f6e">{hp.label}</text>
+            <text x={tx + bw - 10} y={ty + 17} textAnchor="end" fontSize="14" fontWeight="800" fill={MAROON}>{money(hp.value)}</text>
+            <line x1={tx + 10} x2={tx + bw - 10} y1={ty + 26} y2={ty + 26} stroke="#efe6d6" />
+            {list.map((sl, k) => (
+              <g key={k}>
+                <text x={tx + 10} y={ty + 42 + k * 17} fontSize="11.5" fontWeight="700" fill="#2b2b2b">{short(String(sl.party || 'Walk-in customer'), 17)}</text>
+                <text x={tx + bw - 10} y={ty + 42 + k * 17} textAnchor="end" fontSize="11.5" fontWeight="800" fill={MAROON}>{money(sl.amount)}</text>
+              </g>
+            ))}
+            {more > 0 && <text x={tx + 10} y={ty + 42 + list.length * 17} fontSize="10" fontWeight="600" fill="#8a7f6e">+{more} more sale{more === 1 ? '' : 's'}</text>}
+            {noDetail && <text x={tx + 10} y={ty + 42} fontSize="10" fontStyle="italic" fill="#8a7f6e">Customer details not sent by server</text>}
+          </g>
+        )}
+      </svg>
+    </div>
   );
 }
 
@@ -195,8 +286,9 @@ export default function Dashboard() {
   const rows = d?.stock?.rows || [];
   const hasCost = rows[0]?.cost !== undefined;
   const collected = d?.sales?.byMode?.reduce((s, m) => s + Number(m.amount), 0) || 0;
-  const hourly = d?.hourly || [];
-  const hasGraph = hourly.length > 0 && hourly.some((p) => p.value > 0);
+  const hourly = (d?.hourly || []).map((p) => ({ label: p.label, value: Number(p.value) || 0, sales: Array.isArray(p.sales) ? p.sales : [] }));
+  const series = range === 'today' ? fullDay(hourly) : hourly;
+  const hasGraph = series.some((p) => p.value > 0);
   const mix = d?.mix || [];
   const mixTotal = mix.reduce((s, m) => s + Number(m.amount), 0);
   const recent = d?.recent || [];
@@ -307,7 +399,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="border-t border-[#f3ebdc] pt-3">
-            {hasGraph ? <AreaChart points={hourly} /> : (
+            {hasGraph ? <AreaChart key={range} points={series} /> : (
               <div className="grid h-56 place-items-center text-center">
                 <div>
                   <div className="mx-auto mb-3 grid h-10 w-10 animate-spin place-items-center rounded-full border border-[#e8d9b4] border-t-[#b8892f]" />
@@ -349,10 +441,13 @@ export default function Dashboard() {
           {recent.length ? (
             <ul className="space-y-2.5">
               {recent.map((t) => (
-                <li key={t.no} className="rounded-xl border border-[#f0e6d4] p-3 text-sm">
-                  <div className="flex items-center justify-between"><span className="font-bold">{t.no} <span className="ml-1 rounded bg-[#f6ead0] px-1.5 py-0.5 text-[10px] capitalize text-[#7a5a12]">{t.status}</span></span><b>{money(t.amount)}</b></div>
-                  <div className="flex justify-between text-xs text-stone-500"><span className="font-semibold text-stone-700">{t.party}</span><span className="capitalize">{t.mode}</span></div>
-                  {t.note && <div className="text-[11px] text-stone-400">{t.note}</div>}
+                <li key={t.no} className="group cursor-default rounded-xl border border-l-4 border-[#f0e6d4] border-l-transparent bg-white p-3 text-sm transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#e2cf9f] hover:border-l-[#b8892f] hover:bg-[#fffaf0] hover:shadow-md">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[15px] font-extrabold" style={{ color: MAROON }}>{t.no} <span className="ml-1 rounded bg-[#f6ead0] px-1.5 py-0.5 text-[10px] font-bold capitalize text-[#7a5a12]">{t.status}</span></span>
+                    <b className="origin-right text-base font-extrabold transition-transform duration-200 group-hover:scale-110" style={{ color: MAROON }}>{money(t.amount)}</b>
+                  </div>
+                  <div className="mt-0.5 flex justify-between text-xs text-stone-500"><span className="font-bold text-stone-800">{t.party}</span><span className="font-semibold capitalize text-stone-600">{t.mode}</span></div>
+                  {t.note && <div className="text-[11px] font-medium text-stone-500">{t.note}</div>}
                 </li>
               ))}
             </ul>
