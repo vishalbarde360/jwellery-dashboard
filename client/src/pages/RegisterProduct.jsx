@@ -73,7 +73,7 @@ const typesFor = (category, metal) => (category === 'silver' || (category === 's
 const METAL_BY_CATEGORY = { gold: 'gold', silver: 'silver' };
 
 const blank = { category: 'gold', type: 'ring', subType: '', productId: '', name: '', sku: '', metal: 'gold', purity: '22K', defaultPriceMethod: 'weight', defaultWastagePercent: '', defaultMakingType: 'percent', defaultMakingValue: '' };
-const blankPiece = { barcode: '', name: '', grossWeight: '', stoneWeight: '', stoneValue: '', costPrice: '', fixedPrice: '', attrs: {} };
+const blankPiece = { quantity: 1, barcode: '', name: '', grossWeight: '', stoneWeight: '', stoneValue: '', costPrice: '', fixedPrice: '', attrs: {} };
 
 export default function RegisterProduct() {
   const { can, settings } = useAuth();
@@ -147,17 +147,28 @@ export default function RegisterProduct() {
     setSaving(true); setMsg(null);
     const num = (v) => (v === '' ? 0 : Number(v));
     try {
+      // Many identical pieces at once: one barcode is generated for each piece, the rest of the details are the same.
+      const qty = withPiece ? Math.min(Math.max(parseInt(piece.quantity, 10) || 1, 1), 500) : 0;
+      let pieces;
+      if (withPiece) {
+        const base = { name: piece.name || undefined, grossWeight: gross, stoneWeight: stone, stoneValue: num(piece.stoneValue), costPrice: num(piece.costPrice), fixedPrice: num(piece.fixedPrice), attrs: piece.attrs };
+        if (qty > 1) {
+          const g = await api.post('/barcodes/generate', { count: qty });
+          pieces = g.data.barcodes.map((b) => ({ ...base, barcode: b }));
+        } else pieces = [{ ...base, barcode: piece.barcode }];
+      }
       // The server makes the SKU for a new product (category-type-number), so it can never clash.
       const { data } = await api.post('/products/register', {
         productId: f.productId || undefined,
         product: f.productId ? undefined : { name: f.name, category: f.type, subType: f.subType || undefined, collection: f.category, metal: f.metal, purity: f.purity, defaultPriceMethod: f.defaultPriceMethod, defaultWastagePercent: num(f.defaultWastagePercent), defaultMakingType: f.defaultMakingType, defaultMakingValue: num(f.defaultMakingValue) },
-        piece: withPiece ? { barcode: piece.barcode, name: piece.name || undefined, grossWeight: gross, stoneWeight: stone, stoneValue: num(piece.stoneValue), costPrice: num(piece.costPrice), fixedPrice: num(piece.fixedPrice), attrs: piece.attrs } : undefined,
+        pieces,
       });
       setSaved(data);
       setProducts((ps) => (ps.some((p) => p._id === data.product._id) ? ps : [...ps, data.product]));
       setF((cur) => ({ ...cur, productId: data.product._id, sku: data.product.sku || cur.sku }));
       setPiece(blankPiece);
-      setMsg({ type: 'ok', text: data.item ? `Registered ${data.item.barcode}. You can register the next piece of the same product, or print its label.` : 'Product saved.' });
+      const n = data.items?.length || (data.item ? 1 : 0);
+      setMsg({ type: 'ok', text: n > 1 ? `Registered ${n} pieces (${data.items[0].barcode} to ${data.items[n - 1].barcode}). Print their labels from the link below.` : n === 1 ? `Registered ${data.item.barcode}. You can register the next piece of the same product, or print its label.` : 'Product saved.' });
     } catch (x) { setMsg({ type: 'err', text: errMsg(x) }); } finally { setSaving(false); }
   };
 
@@ -201,7 +212,10 @@ export default function RegisterProduct() {
           {!can('stock.receive') && <p className="text-xs text-slate-500">Your role can register product types only. Pieces come in through a purchase.</p>}
           {withPiece && (
             <div className="grid gap-4 md:grid-cols-2">
-              <div>{fld('Barcode', 'bc', <div className="flex gap-2"><input id="bc" required className="input" value={piece.barcode} onChange={(e) => setPiece({ ...piece, barcode: e.target.value })} /><button type="button" className="btn-ghost" onClick={genCode}>Generate</button></div>)}</div>
+              {fld('Quantity (identical pieces)', 'qty', <input id="qty" type="number" min="1" max="500" step="1" className="input" value={piece.quantity} onChange={(e) => setPiece({ ...piece, quantity: e.target.value })} />)}
+              {Number(piece.quantity) > 1
+                ? <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-600">{Math.min(Number(piece.quantity), 500)} barcodes will be generated automatically, one for each piece. All pieces get the same weight and details.</div>
+                : <div>{fld('Barcode', 'bc', <div className="flex gap-2"><input id="bc" required className="input" value={piece.barcode} onChange={(e) => setPiece({ ...piece, barcode: e.target.value })} /><button type="button" className="btn-ghost" onClick={genCode}>Generate</button></div>)}</div>}
               {fld('Piece name (optional)', 'pnm', <input id="pnm" className="input" placeholder={f.name} value={piece.name} onChange={(e) => setPiece({ ...piece, name: e.target.value })} />)}
               {fld('Gross weight (g)', 'gw', <input id="gw" required type="number" step="0.001" className="input" value={piece.grossWeight} onChange={(e) => setPiece({ ...piece, grossWeight: e.target.value })} />)}
               {fld('Stone weight (g)', 'sw', <input id="sw" type="number" step="0.001" className="input" value={piece.stoneWeight} onChange={(e) => setPiece({ ...piece, stoneWeight: e.target.value })} />)}
@@ -214,8 +228,10 @@ export default function RegisterProduct() {
             </div>
           )}
         </section>
-        <button className="btn-primary !py-3" disabled={saving}>{saving ? 'Saving…' : withPiece ? 'Register product and piece' : 'Save product'}</button>
-        {saved?.item && <Link className="ml-3 text-sm font-semibold text-ink-500 underline" to={`/labels?q=${encodeURIComponent(saved.item.barcode)}`}>Print label for {saved.item.barcode}</Link>}
+        <button className="btn-primary !py-3" disabled={saving}>{saving ? 'Saving…' : withPiece ? (Number(piece.quantity) > 1 ? `Register product and ${Math.min(Number(piece.quantity), 500)} pieces` : 'Register product and piece') : 'Save product'}</button>
+        {saved?.item && (saved.items?.length > 1
+          ? <Link className="ml-3 text-sm font-semibold text-ink-500 underline" to={`/labels?q=${encodeURIComponent(saved.product?.sku || saved.item.barcode)}`}>Print labels for {saved.items.length} pieces</Link>
+          : <Link className="ml-3 text-sm font-semibold text-ink-500 underline" to={`/labels?q=${encodeURIComponent(saved.item.barcode)}`}>Print label for {saved.item.barcode}</Link>)}
       </form>
 
       <aside className="space-y-4 xl:sticky xl:top-4 xl:h-fit">
