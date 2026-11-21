@@ -13,6 +13,37 @@ import { HttpError } from '../utils/errors.js';
 const router = Router();
 router.use(protect);
 
+// ---- SKU: <category>-<type>-<running number>, e.g. GLD-RING-001, SLV-PAYA-004, ART-NECK-002 ----
+const CAT_CODE = { gold: 'GLD', silver: 'SLV', special_design: 'ART' };
+const typeCode = (key) => {
+  const w = String(key || '').split('_').filter(Boolean);
+  return (w.length > 1 ? w.map((x) => x[0]).join('') : (w[0] || 'GEN').slice(0, 4)).toUpperCase();
+};
+// Looks at ALL products (also inactive ones) and all pieces, so a number that is already used is never handed out again.
+async function nextSku(collection, type, session) {
+  const prefix = `${CAT_CODE[collection] || 'GEN'}-${typeCode(type)}-`;
+  const rx = new RegExp(`^${escapeRegex(prefix)}(\\d+)$`, 'i');
+  const [ps, is] = await Promise.all([
+    Product.find({ sku: rx }).select('sku').session(session).lean(),
+    Item.find({ sku: rx }).select('sku').session(session).lean(),
+  ]);
+  const max = [...ps, ...is].reduce((m, r) => Math.max(m, parseInt(String(r.sku).match(rx)[1], 10) || 0), 0);
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
+}
+
+// Tells exactly WHICH field is duplicated, so the message is not a guess.
+function dupField(e) {
+  const keys = Object.keys(e.keyValue || e.keyPattern || {});
+  const field = keys[0] || (/index:\s*([A-Za-z0-9]+?)_/.exec(e.message || '') || [])[1] || '';
+  return { field, value: e.keyValue?.[field] };
+}
+function dupMessage(e) {
+  const { field, value } = dupField(e);
+  if (field === 'barcode') return `Barcode ${value ?? ''} is already used by another piece`.replace('  ', ' ');
+  if (field === 'sku') return `SKU ${value ?? ''} is already used`.replace('  ', ' ');
+  return `Duplicate value${field ? ` for ${field}` : ''}${value ? `: ${value}` : ''}`;
+}
+
 router.get('/', need('stock.read'), async (req, res) => {
   const filter = { active: true };
   if (req.query.q) { const r = new RegExp(escapeRegex(req.query.q), 'i'); filter.$or = [{ name: r }, { sku: r }]; }
@@ -24,7 +55,7 @@ router.post('/', need('products.write'), async (req, res, next) => {
     const { name, sku, category, metal, purity, hsn, defaultPriceMethod, defaultWastagePercent, defaultMakingType, defaultMakingValue } = req.body;
     res.status(201).json(await Product.create({ name, sku: sku || undefined, category, metal, purity, hsn, defaultPriceMethod, defaultWastagePercent, defaultMakingType, defaultMakingValue }));
   } catch (e) {
-    if (e.code === 11000) return res.status(409).json({ message: 'That SKU is already used' });
+    if (e.code === 11000) return res.status(409).json({ message: dupMessage(e) });
     next(e);
   }
 });
@@ -43,22 +74,27 @@ router.patch('/:id', need('products.write'), async (req, res) => {
 // Product registration in one step: the product type (category, metal, purity, price rules)
 // and, optionally, the first real piece with its barcode and weights. Saved together, or not at all.
 // Registering a piece directly is for opening stock and own-made pieces. It is logged like any other change.
+// A new product gets its SKU from the server (category-type-number). If two people register at the same moment and
+// the number clashes, the whole save is tried again with the next free number.
 router.post('/register', need('products.write'), async (req, res, next) => {
   try {
     const { productId, product: p = {}, piece } = req.body;
     if (piece && !can(req.user.role, 'stock.receive')) throw new HttpError(403, "You don't have permission: stock.receive");
 
-    const out = await runInTransaction(async (session) => {
+    const save = () => runInTransaction(async (session) => {
       let product;
       if (productId) {
         product = await Product.findById(productId).session(session).lean();
         if (!product) throw new HttpError(400, 'Product not found');
       } else {
         if (!String(p.name || '').trim()) throw new HttpError(400, 'Give the product a name');
-        if (!CATEGORIES[p.category]) throw new HttpError(400, 'Choose a category');
+        if (!String(p.category || '').trim()) throw new HttpError(400, 'Choose a type');
         if (!p.metal || !String(p.purity || '').trim()) throw new HttpError(400, 'Choose the metal and purity');
+        const collection = p.collection || (p.metal === 'silver' ? 'silver' : 'gold');
+        const sku = String(p.sku || '').trim() || await nextSku(collection, p.category, session);
         const [created] = await Product.create([{
-          name: p.name, sku: p.sku || undefined, category: p.category, metal: p.metal, purity: String(p.purity).trim(),
+          name: p.name, sku, category: p.category, subType: p.subType || undefined, collection,
+          metal: p.metal, purity: String(p.purity).trim(),
           defaultPriceMethod: p.defaultPriceMethod, defaultWastagePercent: p.defaultWastagePercent,
           defaultMakingType: p.defaultMakingType, defaultMakingValue: p.defaultMakingValue,
         }], { session });
@@ -88,10 +124,19 @@ router.post('/register', need('products.write'), async (req, res, next) => {
       }
       return { product, item: item && item.toObject() };
     });
+
+    let out;
+    for (let attempt = 0; ; attempt++) {
+      try { out = await save(); break; } catch (e) {
+        // Only a clash on an auto-made SKU is worth another try. A barcode clash needs a different barcode.
+        const retry = e.code === 11000 && !productId && !String(p.sku || '').trim() && dupField(e).field === 'sku' && attempt < 4;
+        if (!retry) throw e;
+      }
+    }
     audit(req, 'product.register', 'Product', String(out.product._id), { barcode: out.item?.barcode });
     res.status(201).json(out);
   } catch (e) {
-    if (e.code === 11000) return res.status(409).json({ message: 'That SKU or barcode is already used' });
+    if (e.code === 11000) return res.status(409).json({ message: dupMessage(e) });
     next(e);
   }
 });
