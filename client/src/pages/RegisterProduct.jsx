@@ -15,7 +15,7 @@ const DEFAULT_PURITY = { gold: '22K', silver: '925' };
 const METHODS = [['weight', 'Net weight x rate + wastage + making'], ['gross_weight', 'Gross weight x rate + making'], ['fixed', 'Fixed price']];
 
 // Category buttons (fixed list, no backend dependency)
-const COLLECTIONS = [['gold', 'Gold'], ['silver', 'Silver'], ['special_design', 'Special Design']];
+const COLLECTIONS = [['gold', 'Gold'], ['silver', 'Silver'], ['special_design', 'Artificial Design']];
 // Jewellery types per metal. `subs` = optional sub-types shown in a second dropdown.
 const SILVER_TYPES = [
   { key: 'payal', label: 'Payal', subs: ['Khushboo Payal', 'Patta Payal', 'Paijep', 'Chain Payal', 'S Payal', 'SR Payal', 'Kolhapuri Payal', 'B Payal', 'Antique Payal'] },
@@ -52,6 +52,22 @@ const GOLD_TYPES = [
   { key: 'antique', label: 'Antique Jewelry' },
   { key: 'template', label: 'Template Jewelry' },
 ];
+// Auto SKU: <category>-<type>-<running number>, e.g. GLD-RING-001, SLV-PAYA-004, ART-NECK-002
+const CAT_CODE = { gold: 'GLD', silver: 'SLV', special_design: 'ART' };
+const typeCode = (key) => {
+  const w = String(key || '').split('_').filter(Boolean);
+  return (w.length > 1 ? w.map((x) => x[0]).join('') : (w[0] || 'GEN').slice(0, 4)).toUpperCase();
+};
+const makeSku = (list, category, type) => {
+  const prefix = `${CAT_CODE[category] || 'GEN'}-${typeCode(type)}-`;
+  const max = list.reduce((m, p) => {
+    const s = String(p.sku || '').toUpperCase();
+    if (!s.startsWith(prefix)) return m;
+    const n = parseInt(s.slice(prefix.length), 10);
+    return Number.isNaN(n) ? m : Math.max(m, n);
+  }, 0);
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
+};
 const typesFor = (category, metal) => (category === 'silver' || (category === 'special_design' && metal === 'silver') ? SILVER_TYPES : GOLD_TYPES);
 // Metal is decided by category (special_design lets you choose gold or silver)
 const METAL_BY_CATEGORY = { gold: 'gold', silver: 'silver' };
@@ -74,7 +90,10 @@ export default function RegisterProduct() {
   useEffect(() => { api.get('/categories').then((r) => setCats(r.data)); api.get('/products').then((r) => setProducts(r.data)).catch(() => {}); }, []);
   const cat = cats.find((c) => c.key === f.type);
   const baseTypes = typesFor(f.category, f.metal);
+  const artificial = f.category === 'special_design';
+  const methods = artificial ? METHODS.filter(([k]) => k === 'fixed') : METHODS;
   const typeList = baseTypes.some((t) => t.key === f.type) || !f.type ? baseTypes : [...baseTypes, { key: f.type, label: f.type }];
+  const nextSku = locked ? f.sku : makeSku(products, f.category, f.type);
   const subs = typeList.find((t) => t.key === f.type)?.subs || [];
   const purityOpts = (() => { const o = PURITY_OPTS[f.metal] || []; return !f.purity || o.some(([v]) => v === f.purity) ? o : [...o, [f.purity, f.purity]]; })();
   const locked = !!f.productId;
@@ -82,10 +101,10 @@ export default function RegisterProduct() {
   const visible = products.filter((p) => (f.category === 'special_design' ? p.collection === 'special_design' : p.metal === f.category && p.collection !== 'special_design'));
   const prodOpt = (p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` (${p.sku})` : ''}{p.purity ? ` - ${p.purity}` : ''}</option>;
 
-  const chooseCategory = (key) => { const m = METAL_BY_CATEGORY[key] || 'gold'; setF({ ...blank, category: key, metal: m, purity: DEFAULT_PURITY[m], type: typesFor(key, m)[0].key }); setPiece({ ...piece, attrs: {} }); };
+  const chooseCategory = (key) => { const m = METAL_BY_CATEGORY[key] || 'gold'; setF({ ...blank, category: key, metal: m, purity: DEFAULT_PURITY[m], type: typesFor(key, m)[0].key, defaultPriceMethod: key === 'special_design' ? 'fixed' : 'weight' }); setPiece({ ...piece, attrs: {} }); };
   const chooseProduct = (id) => {
     const p = products.find((x) => x._id === id);
-    setF(p ? { ...f, productId: id, type: p.category, subType: p.subType || '', category: p.collection || (p.metal === 'silver' ? 'silver' : 'gold'), name: p.name, sku: p.sku || '', metal: p.metal, purity: p.purity, defaultPriceMethod: p.defaultPriceMethod || 'weight', defaultWastagePercent: p.defaultWastagePercent ?? '', defaultMakingType: p.defaultMakingType, defaultMakingValue: p.defaultMakingValue ?? '' } : { ...blank, category: f.category, metal: f.metal === 'silver' ? 'silver' : 'gold', purity: DEFAULT_PURITY[f.metal === 'silver' ? 'silver' : 'gold'], type: typesFor(f.category, f.metal)[0].key });
+    setF(p ? { ...f, productId: id, type: p.category, subType: p.subType || '', category: p.collection || (p.metal === 'silver' ? 'silver' : 'gold'), name: p.name, sku: p.sku || '', metal: p.metal, purity: p.purity, defaultPriceMethod: p.defaultPriceMethod || 'weight', defaultWastagePercent: p.defaultWastagePercent ?? '', defaultMakingType: p.defaultMakingType, defaultMakingValue: p.defaultMakingValue ?? '' } : { ...blank, defaultPriceMethod: f.category === 'special_design' ? 'fixed' : 'weight', category: f.category, metal: f.metal === 'silver' ? 'silver' : 'gold', purity: DEFAULT_PURITY[f.metal === 'silver' ? 'silver' : 'gold'], type: typesFor(f.category, f.metal)[0].key });
   };
 
   const gross = Number(piece.grossWeight) || 0;
@@ -110,14 +129,20 @@ export default function RegisterProduct() {
     setSaving(true); setMsg(null);
     const num = (v) => (v === '' ? 0 : Number(v));
     try {
+      let sku = f.sku;
+      if (!f.productId) {
+        let list = products;
+        try { list = (await api.get('/products')).data; } catch { /* use the list already loaded */ }
+        sku = makeSku(list, f.category, f.type);
+      }
       const { data } = await api.post('/products/register', {
         productId: f.productId || undefined,
-        product: f.productId ? undefined : { name: f.name, sku: f.sku, category: f.type, subType: f.subType || undefined, collection: f.category, metal: f.metal, purity: f.purity, defaultPriceMethod: f.defaultPriceMethod, defaultWastagePercent: num(f.defaultWastagePercent), defaultMakingType: f.defaultMakingType, defaultMakingValue: num(f.defaultMakingValue) },
+        product: f.productId ? undefined : { name: f.name, sku, category: f.type, subType: f.subType || undefined, collection: f.category, metal: f.metal, purity: f.purity, defaultPriceMethod: f.defaultPriceMethod, defaultWastagePercent: num(f.defaultWastagePercent), defaultMakingType: f.defaultMakingType, defaultMakingValue: num(f.defaultMakingValue) },
         piece: withPiece ? { barcode: piece.barcode, name: piece.name || undefined, grossWeight: gross, stoneWeight: stone, stoneValue: num(piece.stoneValue), costPrice: num(piece.costPrice), fixedPrice: num(piece.fixedPrice), attrs: piece.attrs } : undefined,
       });
       setSaved(data);
       setProducts((ps) => (ps.some((p) => p._id === data.product._id) ? ps : [...ps, data.product]));
-      setF((cur) => ({ ...cur, productId: data.product._id }));
+      setF((cur) => ({ ...cur, productId: data.product._id, sku: data.product.sku || sku }));
       setPiece(blankPiece);
       setMsg({ type: 'ok', text: data.item ? `Registered ${data.item.barcode}. You can register the next piece of the same product, or print its label.` : 'Product saved.' });
     } catch (x) { setMsg({ type: 'err', text: errMsg(x) }); } finally { setSaving(false); }
@@ -147,13 +172,12 @@ export default function RegisterProduct() {
         <section className="card grid gap-4 p-4 md:grid-cols-2">
           <h2 className="font-extrabold text-ink md:col-span-2">Product type</h2>
           <div className="md:col-span-2">{fld('Use an existing product', 'pp', <select id="pp" className="input" value={f.productId} onChange={(e) => chooseProduct(e.target.value)}><option value="">New product</option>{visible.map(prodOpt)}</select>)}</div>
-          {fld('Name', 'pn', <input id="pn" required disabled={locked} className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />)}
-          {fld('SKU', 'ps', <input id="ps" disabled={locked} className="input uppercase" value={f.sku} onChange={(e) => setF({ ...f, sku: e.target.value })} />)}
+          <div className="md:col-span-2">{fld('Name', 'pn', <input id="pn" required disabled={locked} className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />)}</div>
           {fld('Type', 'pt', <select id="pt" disabled={locked} className="input" value={f.type} onChange={(e) => { setF({ ...f, type: e.target.value, subType: '' }); setPiece({ ...piece, attrs: {} }); }}>{typeList.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>)}
           {subs.length > 0 && fld('Sub type', 'pst', <select id="pst" disabled={locked} className="input" value={f.subType} onChange={(e) => setF({ ...f, subType: e.target.value })}><option value="">Choose</option>{subs.map((x) => <option key={x} value={x}>{x}</option>)}</select>)}
           {f.category === 'special_design' && fld('Metal', 'pm', <select id="pm" disabled={locked} className="input" value={f.metal} onChange={(e) => { const m = e.target.value; setF({ ...f, metal: m, purity: DEFAULT_PURITY[m], type: typesFor(f.category, m)[0].key, subType: '' }); }}><option value="gold">Gold</option><option value="silver">Silver</option></select>)}
           {fld('Purity', 'pu', <select id="pu" required disabled={locked} className="input" value={f.purity} onChange={(e) => setF({ ...f, purity: e.target.value })}>{purityOpts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>)}
-          <div className="md:col-span-2">{fld('Price method', 'pq', <select id="pq" disabled={locked} className="input" value={f.defaultPriceMethod} onChange={(e) => setF({ ...f, defaultPriceMethod: e.target.value })}>{METHODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>)}</div>
+          <div className="md:col-span-2">{fld('Price method', 'pq', <select id="pq" disabled={locked || artificial} className="input" value={f.defaultPriceMethod} onChange={(e) => setF({ ...f, defaultPriceMethod: e.target.value })}>{methods.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>)}</div>
           {f.defaultPriceMethod === 'weight' && fld('Wastage % (of metal value)', 'pw', <input id="pw" type="number" step="0.01" disabled={locked} className="input" value={f.defaultWastagePercent} onChange={(e) => setF({ ...f, defaultWastagePercent: e.target.value })} />)}
           {f.defaultPriceMethod !== 'fixed' && fld('Making charge', 'pk', <div className="flex gap-1"><select aria-label="Making type" disabled={locked} className="input !w-28" value={f.defaultMakingType} onChange={(e) => setF({ ...f, defaultMakingType: e.target.value })}><option value="percent">percent</option><option value="per_gram">per gram</option><option value="fixed">fixed ₹</option></select><input id="pk" type="number" step="0.01" disabled={locked} className="input" value={f.defaultMakingValue} onChange={(e) => setF({ ...f, defaultMakingValue: e.target.value })} /></div>)}
         </section>
@@ -185,7 +209,7 @@ export default function RegisterProduct() {
           <h2 className="mb-2 font-extrabold text-ink">Label preview</h2>
           <div className="overflow-hidden rounded-md border border-dashed border-slate-300 bg-white" style={{ width: '100mm', height: '50mm', maxWidth: '100%' }}>
             <div style={{ transform: 'scale(2)', transformOrigin: 'top left', width: '50mm', height: '25mm' }}>
-              <LabelCard shop={settings.shopName || 'Your shop'} name={piece.name || f.name || 'Product name'} purity={f.purity} netWeight={net.toFixed(3)} sku={f.sku} barcode={piece.barcode || 'WN000000'} category={f.type} attrs={piece.attrs} categories={cats} />
+              <LabelCard shop={settings.shopName || 'Your shop'} name={piece.name || f.name || 'Product name'} purity={f.purity} netWeight={net.toFixed(3)} sku={nextSku} barcode={piece.barcode || 'WN000000'} category={f.type} attrs={piece.attrs} categories={cats} />
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">Printed size is 50 × 25 mm. This preview is enlarged.</p>
