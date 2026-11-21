@@ -61,7 +61,7 @@ const typeCode = (key) => {
 const makeSku = (list, category, type) => {
   const prefix = `${CAT_CODE[category] || 'GEN'}-${typeCode(type)}-`;
   const max = list.reduce((m, p) => {
-    const s = String(p.sku || '').toUpperCase();
+    const s = String(p.sku || '').trim().toUpperCase();
     if (!s.startsWith(prefix)) return m;
     const n = parseInt(s.slice(prefix.length), 10);
     return Number.isNaN(n) ? m : Math.max(m, n);
@@ -147,18 +147,29 @@ export default function RegisterProduct() {
     setSaving(true); setMsg(null);
     const num = (v) => (v === '' ? 0 : Number(v));
     try {
-      let sku = f.sku;
+      // Get the latest product list so the new SKU number is based on what is really saved.
+      let list = products;
       if (!f.productId) {
-        // Re-fetch the latest list so two people registering together do not get the same number.
-        let list = products;
-        try { list = (await api.get('/products')).data; } catch { /* use the list already loaded */ }
-        sku = makeSku(list, f.category, f.type);
+        try { list = (await api.get('/products')).data; setProducts(list); } catch { /* use the list already loaded */ }
       }
-      const { data } = await api.post('/products/register', {
-        productId: f.productId || undefined,
-        product: f.productId ? undefined : { name: f.name, sku, category: f.type, subType: f.subType || undefined, collection: f.category, metal: f.metal, purity: f.purity, defaultPriceMethod: f.defaultPriceMethod, defaultWastagePercent: num(f.defaultWastagePercent), defaultMakingType: f.defaultMakingType, defaultMakingValue: num(f.defaultMakingValue) },
-        piece: withPiece ? { barcode: piece.barcode, name: piece.name || undefined, grossWeight: gross, stoneWeight: stone, stoneValue: num(piece.stoneValue), costPrice: num(piece.costPrice), fixedPrice: num(piece.fixedPrice), attrs: piece.attrs } : undefined,
-      });
+      // If the server says the SKU is already taken, go to the next number and try again.
+      const taken = [];
+      let sku = f.sku;
+      let data = null;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        if (!f.productId) sku = makeSku([...list, ...taken.map((s) => ({ sku: s }))], f.category, f.type);
+        try {
+          ({ data } = await api.post('/products/register', {
+            productId: f.productId || undefined,
+            product: f.productId ? undefined : { name: f.name, sku, category: f.type, subType: f.subType || undefined, collection: f.category, metal: f.metal, purity: f.purity, defaultPriceMethod: f.defaultPriceMethod, defaultWastagePercent: num(f.defaultWastagePercent), defaultMakingType: f.defaultMakingType, defaultMakingValue: num(f.defaultMakingValue) },
+            piece: withPiece ? { barcode: piece.barcode, name: piece.name || undefined, grossWeight: gross, stoneWeight: stone, stoneValue: num(piece.stoneValue), costPrice: num(piece.costPrice), fixedPrice: num(piece.fixedPrice), attrs: piece.attrs } : undefined,
+          }));
+          break;
+        } catch (x) {
+          if (!f.productId && attempt < 9 && /sku/i.test(errMsg(x))) { taken.push(sku); continue; }
+          throw x;
+        }
+      }
       setSaved(data);
       setProducts((ps) => (ps.some((p) => p._id === data.product._id) ? ps : [...ps, data.product]));
       setF((cur) => ({ ...cur, productId: data.product._id, sku: data.product.sku || sku }));
