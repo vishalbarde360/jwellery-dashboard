@@ -18,6 +18,15 @@ const METHODS = [['weight', 'Net weight x rate + wastage + making'], ['gross_wei
 const TYPES = ['purchase', 'sale', 'return', 'transfer', 'adjustment', 'inspection'];
 const SIZES = [25, 50, 100];
 
+// Stock summary cards: gold, silver and artificial (every piece whose metal is not gold or silver).
+// `filter` is the metal filter that opens when the card is clicked.
+const GROUPS = [
+  { key: 'gold', label: 'Gold', color: '#b8892f', filter: 'gold', pred: (r) => r.metal === 'gold' },
+  { key: 'silver', label: 'Silver', color: '#8fa0b8', filter: 'silver', pred: (r) => r.metal === 'silver' },
+ 
+];
+const fmtG = (n) => (n >= 1000 ? `${(n / 1000).toFixed(3)} kg` : `${n.toFixed(3)} g`);
+
 // Where a stock movement came from: the source transaction.
 const sourceLink = (m) => (m.type === 'sale' && m.ref ? `/invoices/no/${m.ref}` : m.type === 'return' ? '/returns' : m.type === 'purchase' && m.ref?.startsWith('PUR') ? '/purchases' : null);
 
@@ -27,16 +36,6 @@ const pageNums = (p, n) => {
   [...s].sort((a, b) => a - b).forEach((x) => { if (x - prev > 1) out.push('…'); out.push(x); prev = x; });
   return out;
 };
-
-function Stat({ label, value, sub }) {
-  return (
-    <div className="px-4 py-2">
-      <div className="text-[11px] font-semibold text-stone-500">{label}</div>
-      <div className="text-xl font-extrabold" style={{ color: MAROON }}>{value}</div>
-      {sub && <div className="text-[11px] text-stone-400">{sub}</div>}
-    </div>
-  );
-}
 
 export default function Inventory() {
   const { can, settings } = useAuth();
@@ -102,9 +101,22 @@ export default function Inventory() {
 
   // Summary cards: available stock only, straight from the dashboard report.
   const sTotal = summary ? summary.reduce((s, r) => s + Number(r.count || 0), 0) : null;
-  const sGold = summary ? summary.filter((r) => r.metal === 'gold').reduce((s, r) => s + Number(r.netWeight || 0), 0) : null;
   const priced = summary ? summary.filter((r) => r.marketValue !== null && r.marketValue !== undefined) : [];
   const sValue = summary && priced.length ? priced.reduce((s, r) => s + Number(r.marketValue), 0) : null;
+  const hasCostRows = !!summary && summary[0]?.cost !== undefined;
+  const groups = GROUPS.map((g) => {
+    const rs = (summary || []).filter(g.pred);
+    const pr = rs.filter((r) => r.marketValue !== null && r.marketValue !== undefined);
+    return {
+      ...g,
+      count: rs.reduce((s, r) => s + Number(r.count || 0), 0),
+      net: rs.reduce((s, r) => s + Number(r.netWeight || 0), 0),
+      value: pr.length ? pr.reduce((s, r) => s + Number(r.marketValue), 0) : null,
+      cost: hasCostRows ? rs.reduce((s, r) => s + Number(r.cost || 0), 0) : null,
+    };
+  });
+  const openGroup = (g) => { const n = new URLSearchParams(); n.set('metal', g.filter); setSp(n); };
+  const openCorrections = () => { const n = new URLSearchParams(); n.set('tab', 'corrections'); setSp(n); };
 
   const field = (k, label, type = 'text') => <div key={k}><label className={lab} htmlFor={`e-${k}`}>{label}</label><input id={`e-${k}`} type={type} step="any" className={input} value={edit[k] ?? ''} onChange={(e) => setEdit({ ...edit, [k]: e.target.value })} /></div>;
   const TabBtn = (k, l, extra) => (
@@ -130,18 +142,54 @@ export default function Inventory() {
 
   return (
     <div className="space-y-5 bg-[#fbf6ee] p-4 md:p-6">
-      {/* Header + summary */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold" style={{ color: MAROON }}>Inventory & Pieces</h1>
-          <p className="text-xs text-stone-500">Showroom vault & counter register</p>
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-extrabold" style={{ color: MAROON }}>Inventory & Pieces</h1>
+        <p className="text-xs text-stone-500">Showroom vault & counter register</p>
+      </div>
+
+      {/* Stock summary: total, gold, silver, artificial */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Stock summary">
+        <div className="relative overflow-hidden rounded-2xl p-4 text-white shadow-sm" style={{ background: `linear-gradient(135deg, ${MAROON} 0%, #2f0b15 100%)` }}>
+          <svg className="pointer-events-none absolute -right-4 -top-4 h-28 w-28 text-[#d9b869] opacity-20" viewBox="0 0 100 100" aria-hidden="true">
+            <g fill="none" stroke="currentColor" strokeWidth="2"><circle cx="50" cy="50" r="44" /><circle cx="50" cy="50" r="30" strokeDasharray="4 5" /><circle cx="50" cy="50" r="14" /></g>
+          </svg>
+          <div className="relative">
+            <div className="text-xs font-semibold text-[#f1e3bd]">Total stock</div>
+            <div className="mt-2 flex items-baseline gap-2"><span className="text-4xl font-extrabold leading-none">{sTotal ?? '—'}</span><span className="text-sm font-semibold text-white/70">pieces available</span></div>
+            <div className="mt-3 text-[11px] text-white/60">Estimated value</div>
+            <div className="text-xl font-extrabold text-[#f3dc9a]">{sValue !== null ? money(sValue) : summary ? 'Rate not set' : '—'}</div>
+            <button onClick={openCorrections} className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white hover:bg-white/20">
+              <span className={`h-1.5 w-1.5 rounded-full ${pending.length ? 'bg-red-400' : 'bg-emerald-400'}`} />
+              {pending.length ? `${pending.length} pending audit request${pending.length === 1 ? '' : 's'}` : 'No pending audits'}
+            </button>
+          </div>
         </div>
-        <div className={`${card} flex flex-wrap divide-x divide-[#f0e6d4]`}>
-          <Stat label="Total pieces" value={sTotal ?? '—'} sub="Available" />
-          <Stat label="Gold stock (net)" value={sGold !== null ? `${sGold.toFixed(3)} g` : '—'} />
-          <Stat label="Estimated value" value={sValue !== null ? money(sValue) : summary ? 'Rate not set' : '—'} />
-          <Stat label="Pending audit" value={`${pending.length} request${pending.length === 1 ? '' : 's'}`} />
-        </div>
+
+        {groups.map((g) => {
+          const share = sTotal ? Math.round((g.count / sTotal) * 100) : 0;
+          const valueText = g.value !== null ? money(g.value) : g.cost ? money(g.cost) : g.count ? 'Rate not set' : 'No stock';
+          const valueLabel = g.value !== null ? 'Estimated value' : g.cost ? 'Cost value' : 'Value';
+          return (
+            <button key={g.key} onClick={() => openGroup(g)} title={`Show ${g.label} pieces`}
+              className="group rounded-2xl border border-[#ece2d0] bg-white p-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#d9c9a3] hover:shadow-md">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-sm font-extrabold" style={{ color: MAROON }}><span className="h-3 w-3 rounded-full" style={{ background: g.color }} />{g.label}</span>
+                <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold" style={{ background: `${g.color}26`, color: MAROON }}>{summary ? g.count : '—'} pcs</span>
+              </div>
+              <div className="mt-3 text-2xl font-extrabold leading-tight" style={{ color: MAROON }}>{summary ? fmtG(g.net) : '—'}</div>
+              <div className="text-[11px] text-stone-500">Net weight in stock</div>
+              <div className="mt-3 flex items-center justify-between border-t border-[#f3ebdc] pt-2 text-xs">
+                <span className="text-stone-500">{valueLabel}</span>
+                <b className="text-stone-800">{summary ? valueText : '—'}</b>
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#f1e7d3]"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${share}%`, background: g.color }} /></div>
+                <span className="text-[10px] font-semibold text-stone-500">{share}%</span>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <Notice msg={msg} />
