@@ -40,27 +40,11 @@ async function dashboardExtras(rangeKey, tz, today) {
     ? { $hour: { date: '$createdAt', timezone: tz } }
     : { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: tz } };
 
-  const [series, split, latest, bills] = await Promise.all([
+  const [series, split, latest] = await Promise.all([
     Invoice.aggregate([{ $match: match }, { $group: { _id: bucket, value: { $sum: '$grandTotal' } } }, { $sort: { _id: 1 } }]),
     Invoice.aggregate([{ $match: match }, { $unwind: '$lines' }, { $group: { _id: '$lines.metal', amount: { $sum: '$lines.total' } } }, { $sort: { amount: -1 } }]),
     Invoice.find({ status: 'paid' }).sort({ createdAt: -1 }).limit(6).select('invoiceNo status grandTotal customer lines payments').lean(),
-    // Every bill in the range, so the graph can show who each sale was made to when you hover.
-    Invoice.find(match).sort({ createdAt: 1 }).select('invoiceNo grandTotal customer createdAt').lean(),
   ]);
-
-  // Group the bills by the same bucket as the graph (hour for today, date for week/month) in the shop's timezone.
-  const hourFmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' });
-  const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
-  const timeFmt = new Intl.DateTimeFormat('en-IN', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true });
-  const salesBy = new Map();
-  for (const b of bills) {
-    const k = days === 0 ? Number(hourFmt.format(b.createdAt)) : dayFmt.format(b.createdAt);
-    const list = salesBy.get(k) || [];
-    if (list.length < 10) {
-      list.push({ no: b.invoiceNo, party: b.customer?.name || 'Walk-in', amount: r2(b.grandTotal), time: timeFmt.format(b.createdAt) });
-    }
-    salesBy.set(k, list);
-  }
 
   // Graph points. Today = one point per hour between the first and last sale; week/month = one point per day.
   const by = new Map(series.map((s) => [s._id, s.value]));
@@ -69,10 +53,10 @@ async function dashboardExtras(rangeKey, tz, today) {
     if (series.length) {
       // Always show at least 10 AM to 8 PM so even a single sale draws a graph (hours with no sale are 0).
       const lo = Math.min(series[0]._id, 10), hi = Math.max(series[series.length - 1]._id, 20);
-      for (let h = lo; h <= hi; h++) hourly.push({ label: hourLabel(h), value: r2(by.get(h)), sales: salesBy.get(h) || [] });
+      for (let h = lo; h <= hi; h++) hourly.push({ label: hourLabel(h), value: r2(by.get(h)) });
     }
   } else {
-    for (let i = 0; i <= days; i++) { const d = addDays(from, i); hourly.push({ label: shortDate(d), value: r2(by.get(d)), sales: salesBy.get(d) || [] }); }
+    for (let i = 0; i <= days; i++) { const d = addDays(from, i); hourly.push({ label: shortDate(d), value: r2(by.get(d)) }); }
   }
 
   // Gold sold today (net grams). Pieces that came back through a completed return are left out.
