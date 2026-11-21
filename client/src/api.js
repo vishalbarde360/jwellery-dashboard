@@ -1,8 +1,12 @@
 
 import axios from 'axios';
 
+const apiBaseUrl = import.meta.env.VITE_API_URL || (
+  import.meta.env.DEV ? '/api' : 'https://jwellery-dashboard.onrender.com/api'
+);
+
 const api = axios.create({
-  baseURL: 'https://jwellery-dashboard.onrender.com/api',
+  baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
   },

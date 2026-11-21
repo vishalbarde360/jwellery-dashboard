@@ -2,7 +2,11 @@ import mongoose from 'mongoose';
 
 export async function connectDB() {
   mongoose.set('strictQuery', true);
-  await mongoose.connect(process.env.MONGO_URI);
+  const uri = process.env.MONGO_URI?.trim();
+  if (!uri) {
+    throw new Error('MONGO_URI is missing. Set it in server/.env (see server/.env.example).');
+  }
+  await mongoose.connect(uri);
   console.log('MongoDB connected');
   const hello = await mongoose.connection.db.admin().command({ hello: 1 });
   if (!hello.setName && hello.msg !== 'isdbgrid') {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import aviraLogo from '../assets/Avira_logo.png';
 
 const MAROON = '#4a1424';
 const MAROON_DARK = '#3a0f1b';
@@ -62,7 +63,7 @@ function Panel({ branches, branch, setBranch, onNavigate }) {
     <div className="flex h-full flex-col text-white" style={{ background: `linear-gradient(180deg, ${MAROON} 0%, ${MAROON_DARK} 100%)` }}>
       {/* Brand */}
       <div className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
-        <div className="grid h-9 w-9 place-items-center rounded-lg text-lg" style={{ background: GOLD }}>◈</div>
+        <img src={aviraLogo} alt="Avira Jewels" className="h-12 w-12 shrink-0 rounded-lg bg-[#3a0f1b] object-contain" />
         <div className="min-w-0">
           <div className="truncate text-sm font-extrabold">{settings?.shopName || 'Aviraj Jewellery'}</div>
           <div className="text-[9px] font-bold tracking-widest text-[#c9a46a]/80">ENTERPRISE POS & INVENTORY</div>
@@ -138,6 +139,7 @@ export default function Sidebar({ branches = [] }) {
       {/* Mobile: top bar + slide-in menu */}
       <div className="print:hidden flex items-center gap-3 px-4 py-3 text-white md:hidden" style={{ background: MAROON }}>
         <button onClick={() => setOpen(true)} aria-label="Open menu" className="text-xl">☰</button>
+        <img src={aviraLogo} alt="Avira Jewels" className="h-9 w-9 shrink-0 rounded-lg bg-[#3a0f1b] object-contain" />
         <span className="font-extrabold">{settings?.shopName || 'Aviraj Jewellery'}</span>
       </div>
       {open && (
