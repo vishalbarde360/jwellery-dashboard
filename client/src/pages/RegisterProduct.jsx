@@ -73,16 +73,19 @@ export default function RegisterProduct() {
 
   useEffect(() => { api.get('/categories').then((r) => setCats(r.data)); api.get('/products').then((r) => setProducts(r.data)).catch(() => {}); }, []);
   const cat = cats.find((c) => c.key === f.type);
-  const typeList = typesFor(f.category, f.metal);
+  const baseTypes = typesFor(f.category, f.metal);
+  const typeList = baseTypes.some((t) => t.key === f.type) || !f.type ? baseTypes : [...baseTypes, { key: f.type, label: f.type }];
   const subs = typeList.find((t) => t.key === f.type)?.subs || [];
   const purityOpts = (() => { const o = PURITY_OPTS[f.metal] || []; return !f.purity || o.some(([v]) => v === f.purity) ? o : [...o, [f.purity, f.purity]]; })();
   const locked = !!f.productId;
-  const mine = products.filter((p) => p.category === f.type && (!p.collection || p.collection === f.category));
+  const byMetal = (m) => products.filter((p) => p.metal === m);
+  const otherProducts = products.filter((p) => p.metal !== 'gold' && p.metal !== 'silver');
+  const prodOpt = (p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` (${p.sku})` : ''}{p.purity ? ` - ${p.purity}` : ''}</option>;
 
   const chooseCategory = (key) => { const m = METAL_BY_CATEGORY[key] || 'gold'; setF({ ...blank, category: key, metal: m, purity: DEFAULT_PURITY[m], type: typesFor(key, m)[0].key }); setPiece({ ...piece, attrs: {} }); };
   const chooseProduct = (id) => {
     const p = products.find((x) => x._id === id);
-    setF(p ? { ...f, productId: id, type: p.category, subType: p.subType || '', category: p.collection || f.category, name: p.name, sku: p.sku || '', metal: p.metal, purity: p.purity, defaultPriceMethod: p.defaultPriceMethod || 'weight', defaultWastagePercent: p.defaultWastagePercent ?? '', defaultMakingType: p.defaultMakingType, defaultMakingValue: p.defaultMakingValue ?? '' } : { ...blank, category: f.category });
+    setF(p ? { ...f, productId: id, type: p.category, subType: p.subType || '', category: p.collection || (p.metal === 'silver' ? 'silver' : 'gold'), name: p.name, sku: p.sku || '', metal: p.metal, purity: p.purity, defaultPriceMethod: p.defaultPriceMethod || 'weight', defaultWastagePercent: p.defaultWastagePercent ?? '', defaultMakingType: p.defaultMakingType, defaultMakingValue: p.defaultMakingValue ?? '' } : { ...blank, category: f.category, metal: f.metal === 'silver' ? 'silver' : 'gold', purity: DEFAULT_PURITY[f.metal === 'silver' ? 'silver' : 'gold'], type: typesFor(f.category, f.metal)[0].key });
   };
 
   const gross = Number(piece.grossWeight) || 0;
@@ -140,7 +143,7 @@ export default function RegisterProduct() {
 
         <section className="card grid gap-4 p-4 md:grid-cols-2">
           <h2 className="font-extrabold text-ink md:col-span-2">Product type</h2>
-          <div className="md:col-span-2">{fld('Use an existing product', 'pp', <select id="pp" className="input" value={f.productId} onChange={(e) => chooseProduct(e.target.value)}><option value="">New product</option>{mine.map((p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` (${p.sku})` : ''}</option>)}</select>)}</div>
+          <div className="md:col-span-2">{fld('Use an existing product', 'pp', <select id="pp" className="input" value={f.productId} onChange={(e) => chooseProduct(e.target.value)}><option value="">New product</option>{byMetal('gold').length > 0 && <optgroup label="Gold">{byMetal('gold').map(prodOpt)}</optgroup>}{byMetal('silver').length > 0 && <optgroup label="Silver">{byMetal('silver').map(prodOpt)}</optgroup>}{otherProducts.length > 0 && <optgroup label="Other">{otherProducts.map(prodOpt)}</optgroup>}</select>)}</div>
           {fld('Name', 'pn', <input id="pn" required disabled={locked} className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />)}
           {fld('SKU', 'ps', <input id="ps" disabled={locked} className="input uppercase" value={f.sku} onChange={(e) => setF({ ...f, sku: e.target.value })} />)}
           {fld('Type', 'pt', <select id="pt" disabled={locked} className="input" value={f.type} onChange={(e) => { setF({ ...f, type: e.target.value, subType: '' }); setPiece({ ...piece, attrs: {} }); }}>{typeList.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>)}
