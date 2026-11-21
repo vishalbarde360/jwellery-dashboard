@@ -78,8 +78,8 @@ export default function RegisterProduct() {
   const subs = typeList.find((t) => t.key === f.type)?.subs || [];
   const purityOpts = (() => { const o = PURITY_OPTS[f.metal] || []; return !f.purity || o.some(([v]) => v === f.purity) ? o : [...o, [f.purity, f.purity]]; })();
   const locked = !!f.productId;
-  const byMetal = (m) => products.filter((p) => p.metal === m);
-  const otherProducts = products.filter((p) => p.metal !== 'gold' && p.metal !== 'silver');
+  // Existing products shown for the selected category only
+  const visible = products.filter((p) => (f.category === 'special_design' ? p.collection === 'special_design' : p.metal === f.category && p.collection !== 'special_design'));
   const prodOpt = (p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` (${p.sku})` : ''}{p.purity ? ` - ${p.purity}` : ''}</option>;
 
   const chooseCategory = (key) => { const m = METAL_BY_CATEGORY[key] || 'gold'; setF({ ...blank, category: key, metal: m, purity: DEFAULT_PURITY[m], type: typesFor(key, m)[0].key }); setPiece({ ...piece, attrs: {} }); };
@@ -143,7 +143,7 @@ export default function RegisterProduct() {
 
         <section className="card grid gap-4 p-4 md:grid-cols-2">
           <h2 className="font-extrabold text-ink md:col-span-2">Product type</h2>
-          <div className="md:col-span-2">{fld('Use an existing product', 'pp', <select id="pp" className="input" value={f.productId} onChange={(e) => chooseProduct(e.target.value)}><option value="">New product</option>{byMetal('gold').length > 0 && <optgroup label="Gold">{byMetal('gold').map(prodOpt)}</optgroup>}{byMetal('silver').length > 0 && <optgroup label="Silver">{byMetal('silver').map(prodOpt)}</optgroup>}{otherProducts.length > 0 && <optgroup label="Other">{otherProducts.map(prodOpt)}</optgroup>}</select>)}</div>
+          <div className="md:col-span-2">{fld('Use an existing product', 'pp', <select id="pp" className="input" value={f.productId} onChange={(e) => chooseProduct(e.target.value)}><option value="">New product</option>{visible.map(prodOpt)}</select>)}</div>
           {fld('Name', 'pn', <input id="pn" required disabled={locked} className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />)}
           {fld('SKU', 'ps', <input id="ps" disabled={locked} className="input uppercase" value={f.sku} onChange={(e) => setF({ ...f, sku: e.target.value })} />)}
           {fld('Type', 'pt', <select id="pt" disabled={locked} className="input" value={f.type} onChange={(e) => { setF({ ...f, type: e.target.value, subType: '' }); setPiece({ ...piece, attrs: {} }); }}>{typeList.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>)}
