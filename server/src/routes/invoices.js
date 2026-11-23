@@ -22,6 +22,14 @@ const router = Router();
 router.use(protect);
 const MODES = ['cash', 'card', 'upi', 'bank'];
 
+// Adds the customer's public bill link (used for the WhatsApp message) to an invoice response.
+// Old invoices without a token simply get no link.
+const withPublicUrl = (inv) => {
+  const o = inv && typeof inv.toObject === 'function' ? inv.toObject() : inv;
+  const base = (process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+  return { ...o, publicUrl: o?.publicToken && base ? `${base}/bill/${o.publicToken}` : undefined };
+};
+
 function parsePayments(payments) {
   const pays = (Array.isArray(payments) ? payments : []).map((p) => ({ mode: p.mode, amount: Number(p.amount), ref: p.ref }));
   if (!pays.length || pays.some((p) => !MODES.includes(p.mode) || !(p.amount > 0))) {
@@ -107,11 +115,11 @@ router.post('/', need('billing.create'), idempotent, async (req, res, next) => {
         audit(req, 'price.override', 'Invoice', invoice.invoiceNo, { barcode: l.barcode, from: l.breakup.originalSubtotal, to: l.breakup.subtotal, reason: l.breakup.overrideReason });
       }
     }
-    res.status(201).json(invoice);
+    res.status(201).json(withPublicUrl(invoice));
   } catch (e) {
     if (e.code === 11000 && String(e.message).includes('idempotencyKey')) {
       const existing = await Invoice.findOne({ idempotencyKey: req.idempotencyKey }).lean();
-      if (existing) return res.status(200).json(existing);
+      if (existing) return res.status(200).json(withPublicUrl(existing));
     }
     next(e);
   }
