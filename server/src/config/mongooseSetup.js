@@ -8,6 +8,19 @@ const QUERY_OPS = [
   'countDocuments', 'updateOne', 'updateMany', 'deleteOne', 'deleteMany',
 ];
 
+// The ONLY tenant-free read: a customer opening their bill link (no login, so no tenant context).
+// It is allowed only when ALL of these are true, so it cannot be used to read anything else:
+//   - the query asks for it with .setOptions({ publicLookup: true })
+//   - it is a findOne on the Invoice model
+//   - it looks up by publicToken, and the token is a 16 character string (random, not guessable)
+// The token itself is the key: it points to exactly one invoice, which already belongs to one tenant.
+const isPublicInvoiceLookup = (q) => {
+  if (q.op !== 'findOne' || q.model?.modelName !== 'Invoice') return false;
+  if (q.getOptions?.().publicLookup !== true) return false;
+  const t = q.getFilter?.().publicToken;
+  return typeof t === 'string' && t.length === 16;
+};
+
 function tenantPlugin(schema) {
   // Tenant root itself opts out; User declares its own `tenant` (needed for login before any context exists).
   if (schema.options.tenantScoped === false || schema.path('tenant')) return;
@@ -15,6 +28,7 @@ function tenantPlugin(schema) {
   schema.add({ tenant: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true } });
 
   schema.pre(QUERY_OPS, function (next) {
+    if (isPublicInvoiceLookup(this)) return next();
     const ctx = currentTenant();
     if (!ctx) return next(new Error('Tenant context missing: refusing to query'));
     if (!ctx.bypass) this.where({ tenant: ctx.tenantId });
