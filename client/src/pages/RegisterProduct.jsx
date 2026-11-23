@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import api, { errMsg } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Notice } from '../components/Bits';
@@ -8,11 +7,11 @@ import PriceBreakup from '../components/PriceBreakup';
 
 // [value saved / used for rate lookup, label shown]
 const PURITY_OPTS = {
-  gold: [['24K', '24K'], ['22K', '22K'], ['18K', '18K'], ['14K', '14K']],
+  gold: [['24K', '24K'], ['22K', '22K'], ['20K', '20K'], ['18K', '18K'], ['14K', '14K']],
   silver: [['60', 'S 60 Stamp'], ['70', 'S 70 Stamp'], ['91', 'S 91 Stamp'], ['925', 'S 92.5 Sterling Silver'], ['999', 'S 99.99 Silver']],
 };
 const DEFAULT_PURITY = { gold: '22K', silver: '925' };
-const METHODS = [['weight', 'Net weight x rate + wastage + making'], ['gross_weight', 'Gross weight x rate + making'], ['fixed', 'Fixed price']];
+const METHODS = [['weight', 'Net weight x rate + making'], ['gross_weight', 'Gross weight x rate + making'], ['fixed', 'Fixed price']];
 
 // Category buttons (fixed list, no backend dependency)
 const COLLECTIONS = [['gold', 'Gold'], ['silver', 'Silver'], ['special_design', 'Artificial Design']];
@@ -69,11 +68,13 @@ const makeSku = (list, category, type) => {
   return `${prefix}${String(max + 1).padStart(3, '0')}`;
 };
 const typesFor = (category, metal) => (category === 'silver' || (category === 'special_design' && metal === 'silver') ? SILVER_TYPES : GOLD_TYPES);
-// Metal is decided by category (special_design lets you choose gold or silver)
+// Metal is decided by category. Artificial Design has no metal / purity field (gold defaults are used in the background).
 const METAL_BY_CATEGORY = { gold: 'gold', silver: 'silver' };
+const r3 = (n) => Math.round(n * 1000) / 1000;
 
-const blank = { category: 'gold', type: 'ring', subType: '', productId: '', name: '', sku: '', metal: 'gold', purity: '22K', defaultPriceMethod: 'weight', defaultWastagePercent: '', defaultMakingType: 'percent', defaultMakingValue: '' };
-const blankPiece = { quantity: 1, barcode: '', name: '', grossWeight: '', stoneWeight: '', stoneValue: '', costPrice: '', fixedPrice: '', attrs: {} };
+const blank = { category: 'gold', type: 'ring', subType: '', productId: '', name: '', sku: '', metal: 'gold', purity: '22K', defaultPriceMethod: 'weight', defaultMakingType: 'percent', defaultMakingValue: '' };
+// The shop enters the NET weight (metal only). Gross weight sent to the server is net + stone, so pricing stays exactly the same.
+const blankPiece = { quantity: 1, barcode: '', name: '', netWeight: '', stoneWeight: '', stoneValue: '', costPrice: '', fixedPrice: '', attrs: {} };
 
 export default function RegisterProduct() {
   const { can, settings } = useAuth();
@@ -85,7 +86,7 @@ export default function RegisterProduct() {
   const [preview, setPreview] = useState(null);
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(null);
+  const [labels, setLabels] = useState([]); // labels of the pieces just registered, printed from this same page
 
   useEffect(() => { api.get('/categories').then((r) => setCats(r.data)); api.get('/products').then((r) => setProducts(r.data)).catch(() => {}); }, []);
   const cat = cats.find((c) => c.key === f.type);
@@ -100,7 +101,7 @@ export default function RegisterProduct() {
   const nextSku = locked ? f.sku : makeSku(products, f.category, f.type);
   // Existing products shown for the selected category only
   const visible = products.filter((p) => (f.category === 'special_design' ? p.collection === 'special_design' : p.metal === f.category && p.collection !== 'special_design'));
-  const prodOpt = (p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` (${p.sku})` : ''}{p.purity ? ` - ${p.purity}` : ''}</option>;
+  const prodOpt = (p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` (${p.sku})` : ''}{p.purity && p.collection !== 'special_design' ? ` - ${p.purity}` : ''}</option>;
 
   const chooseCategory = (key) => { const m = METAL_BY_CATEGORY[key] || 'gold'; setF({ ...blank, category: key, metal: m, purity: DEFAULT_PURITY[m], type: typesFor(key, m)[0].key, defaultPriceMethod: key === 'special_design' ? 'fixed' : 'weight' }); setPiece({ ...piece, attrs: {} }); };
   const chooseProduct = (id) => {
@@ -118,23 +119,23 @@ export default function RegisterProduct() {
         metal: p.metal,
         purity: p.purity,
         defaultPriceMethod: p.defaultPriceMethod || 'weight',
-        defaultWastagePercent: p.defaultWastagePercent ?? '',
         defaultMakingType: p.defaultMakingType,
         defaultMakingValue: p.defaultMakingValue ?? '',
       }
       : { ...blank, defaultPriceMethod: f.category === 'special_design' ? 'fixed' : 'weight', category: f.category, metal: f.metal === 'silver' ? 'silver' : 'gold', purity: DEFAULT_PURITY[f.metal === 'silver' ? 'silver' : 'gold'], type: typesFor(f.category, f.metal)[0].key });
   };
 
-  const gross = Number(piece.grossWeight) || 0;
+  // Net weight is typed in. Stone weight is optional. Gross = net + stone, so the server still gets gross, stone and works out the same net.
+  const net = Number(piece.netWeight) || 0;
   const stone = Number(piece.stoneWeight) || 0;
-  const net = Math.max(gross - stone, 0);
+  const gross = r3(net + stone);
 
-  // Price preview with today's rate, using the same engine as billing.
-  const sig = JSON.stringify([f.metal, f.purity, f.defaultPriceMethod, f.defaultWastagePercent, f.defaultMakingType, f.defaultMakingValue, piece.grossWeight, piece.stoneWeight, piece.stoneValue, piece.fixedPrice]);
+  // Price preview with today's rate, using the same engine as billing (wastage is always 0 now).
+  const sig = JSON.stringify([f.metal, f.purity, f.defaultPriceMethod, f.defaultMakingType, f.defaultMakingValue, piece.netWeight, piece.stoneWeight, piece.stoneValue, piece.fixedPrice]);
   useEffect(() => {
-    if (!withPiece || (!gross && f.defaultPriceMethod !== 'fixed')) { setPreview(null); return; }
+    if (!withPiece || (!net && f.defaultPriceMethod !== 'fixed')) { setPreview(null); return; }
     const t = setTimeout(() => {
-      api.post('/pricing/preview', { metal: f.metal, purity: f.purity, priceMethod: f.defaultPriceMethod, grossWeight: gross, stoneWeight: stone, stoneValue: piece.stoneValue, fixedPrice: piece.fixedPrice, wastagePercent: f.defaultWastagePercent, makingType: f.defaultMakingType, makingValue: f.defaultMakingValue })
+      api.post('/pricing/preview', { metal: f.metal, purity: f.purity, priceMethod: f.defaultPriceMethod, grossWeight: gross, stoneWeight: stone, stoneValue: piece.stoneValue, fixedPrice: piece.fixedPrice, wastagePercent: 0, makingType: f.defaultMakingType, makingValue: f.defaultMakingValue })
         .then((r) => setPreview(r.data)).catch((e) => setPreview({ message: errMsg(e) }));
     }, 300);
     return () => clearTimeout(t);
@@ -160,15 +161,27 @@ export default function RegisterProduct() {
       // The server makes the SKU for a new product (category-type-number), so it can never clash.
       const { data } = await api.post('/products/register', {
         productId: f.productId || undefined,
-        product: f.productId ? undefined : { name: f.name, category: f.type, subType: f.subType || undefined, collection: f.category, metal: f.metal, purity: f.purity, defaultPriceMethod: f.defaultPriceMethod, defaultWastagePercent: num(f.defaultWastagePercent), defaultMakingType: f.defaultMakingType, defaultMakingValue: num(f.defaultMakingValue) },
+        product: f.productId ? undefined : { name: f.name, category: f.type, subType: f.subType || undefined, collection: f.category, metal: f.metal, purity: f.purity, defaultPriceMethod: f.defaultPriceMethod, defaultWastagePercent: 0, defaultMakingType: f.defaultMakingType, defaultMakingValue: num(f.defaultMakingValue) },
         pieces,
       });
-      setSaved(data);
       setProducts((ps) => (ps.some((p) => p._id === data.product._id) ? ps : [...ps, data.product]));
       setF((cur) => ({ ...cur, productId: data.product._id, sku: data.product.sku || cur.sku }));
+
+      // Keep a copy of the labels BEFORE the form is cleared, so all of them can be printed together on one page.
+      const made = data.items || (data.item ? [data.item] : []);
+      setLabels(made.map((it) => ({
+        barcode: it.barcode,
+        name: piece.name || f.name,
+        purity: artificial ? '' : f.purity,
+        netWeight: net.toFixed(3),
+        sku: data.product.sku || nextSku,
+        category: f.type,
+        attrs: piece.attrs,
+      })));
+
       setPiece(blankPiece);
-      const n = data.items?.length || (data.item ? 1 : 0);
-      setMsg({ type: 'ok', text: n > 1 ? `Registered ${n} pieces (${data.items[0].barcode} to ${data.items[n - 1].barcode}). Print their labels from the link below.` : n === 1 ? `Registered ${data.item.barcode}. You can register the next piece of the same product, or print its label.` : 'Product saved.' });
+      const n = made.length;
+      setMsg({ type: 'ok', text: n > 1 ? `Registered ${n} pieces (${made[0].barcode} to ${made[n - 1].barcode}). All labels are ready to print below.` : n === 1 ? `Registered ${made[0].barcode}. You can register the next piece of the same product, or print its label below.` : 'Product saved.' });
     } catch (x) { setMsg({ type: 'err', text: errMsg(x) }); } finally { setSaving(false); }
   };
 
@@ -179,6 +192,14 @@ export default function RegisterProduct() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_26rem]">
+      {/* Prints only the label sheet, all labels on the same page */}
+      <style>{`@media print {
+        body * { visibility: hidden !important; }
+        #label-sheet, #label-sheet * { visibility: visible !important; }
+        #label-sheet { position: absolute; left: 0; top: 0; }
+        @page { margin: 5mm; }
+      }`}</style>
+
       <form onSubmit={submit} className="space-y-5">
         <h1 className="text-2xl font-extrabold text-ink">Register product</h1>
         <Notice msg={msg} />
@@ -200,10 +221,8 @@ export default function RegisterProduct() {
           <div className="md:col-span-2">{fld('SKU (auto)', 'psku', <input id="psku" readOnly className="input bg-slate-50" value={nextSku} />)}</div>
           {fld('Type', 'pt', <select id="pt" disabled={locked} className="input" value={f.type} onChange={(e) => { setF({ ...f, type: e.target.value, subType: '' }); setPiece({ ...piece, attrs: {} }); }}>{typeList.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>)}
           {subs.length > 0 && fld('Sub type', 'pst', <select id="pst" disabled={locked} className="input" value={f.subType} onChange={(e) => setF({ ...f, subType: e.target.value })}><option value="">Choose</option>{subs.map((x) => <option key={x} value={x}>{x}</option>)}</select>)}
-          {f.category === 'special_design' && fld('Metal', 'pm', <select id="pm" disabled={locked} className="input" value={f.metal} onChange={(e) => { const m = e.target.value; setF({ ...f, metal: m, purity: DEFAULT_PURITY[m], type: typesFor(f.category, m)[0].key, subType: '' }); }}><option value="gold">Gold</option><option value="silver">Silver</option></select>)}
-          {fld('Purity', 'pu', <select id="pu" required disabled={locked} className="input" value={f.purity} onChange={(e) => setF({ ...f, purity: e.target.value })}>{purityOpts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>)}
+          {!artificial && fld('Purity', 'pu', <select id="pu" required disabled={locked} className="input" value={f.purity} onChange={(e) => setF({ ...f, purity: e.target.value })}>{purityOpts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>)}
           <div className="md:col-span-2">{fld('Price method', 'pq', <select id="pq" disabled={locked || artificial} className="input" value={f.defaultPriceMethod} onChange={(e) => setF({ ...f, defaultPriceMethod: e.target.value })}>{methods.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>)}</div>
-          {f.defaultPriceMethod === 'weight' && fld('Wastage % (of metal value)', 'pw', <input id="pw" type="number" step="0.01" disabled={locked} className="input" value={f.defaultWastagePercent} onChange={(e) => setF({ ...f, defaultWastagePercent: e.target.value })} />)}
           {f.defaultPriceMethod !== 'fixed' && fld('Making charge', 'pk', <div className="flex gap-1"><select aria-label="Making type" disabled={locked} className="input !w-28" value={f.defaultMakingType} onChange={(e) => setF({ ...f, defaultMakingType: e.target.value })}><option value="percent">percent</option><option value="per_gram">per gram</option><option value="fixed">fixed ₹</option></select><input id="pk" type="number" step="0.01" disabled={locked} className="input" value={f.defaultMakingValue} onChange={(e) => setF({ ...f, defaultMakingValue: e.target.value })} /></div>)}
         </section>
 
@@ -217,9 +236,8 @@ export default function RegisterProduct() {
                 ? <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-600">{Math.min(Number(piece.quantity), 500)} barcodes will be generated automatically, one for each piece. All pieces get the same weight and details.</div>
                 : <div>{fld('Barcode', 'bc', <div className="flex gap-2"><input id="bc" required className="input" value={piece.barcode} onChange={(e) => setPiece({ ...piece, barcode: e.target.value })} /><button type="button" className="btn-ghost" onClick={genCode}>Generate</button></div>)}</div>}
               {fld('Piece name (optional)', 'pnm', <input id="pnm" className="input" placeholder={f.name} value={piece.name} onChange={(e) => setPiece({ ...piece, name: e.target.value })} />)}
-              {fld('Gross weight (g)', 'gw', <input id="gw" required type="number" step="0.001" className="input" value={piece.grossWeight} onChange={(e) => setPiece({ ...piece, grossWeight: e.target.value })} />)}
+              {fld('Net weight (g)', 'nw', <input id="nw" required type="number" step="0.001" className="input" value={piece.netWeight} onChange={(e) => setPiece({ ...piece, netWeight: e.target.value })} />)}
               {fld('Stone weight (g)', 'sw', <input id="sw" type="number" step="0.001" className="input" value={piece.stoneWeight} onChange={(e) => setPiece({ ...piece, stoneWeight: e.target.value })} />)}
-              <div className="text-sm text-slate-600">Net weight (metal only): <b>{net.toFixed(3)} g</b></div>
               {fld('Stone value (₹)', 'sv', <input id="sv" type="number" step="0.01" className="input" value={piece.stoneValue} onChange={(e) => setPiece({ ...piece, stoneValue: e.target.value })} />)}
               {f.defaultPriceMethod === 'fixed' && fld('Fixed price (₹)', 'fp', <input id="fp" type="number" step="0.01" className="input" value={piece.fixedPrice} onChange={(e) => setPiece({ ...piece, fixedPrice: e.target.value })} />)}
               {can('cost.read') && fld('Cost price (₹)', 'cp', <input id="cp" type="number" step="0.01" className="input" value={piece.costPrice} onChange={(e) => setPiece({ ...piece, costPrice: e.target.value })} />)}
@@ -229,9 +247,26 @@ export default function RegisterProduct() {
           )}
         </section>
         <button className="btn-primary !py-3" disabled={saving}>{saving ? 'Saving…' : withPiece ? (Number(piece.quantity) > 1 ? `Register product and ${Math.min(Number(piece.quantity), 500)} pieces` : 'Register product and piece') : 'Save product'}</button>
-        {saved?.item && (saved.items?.length > 1
-          ? <Link className="ml-3 text-sm font-semibold text-ink-500 underline" to={`/labels?q=${encodeURIComponent(saved.product?.sku || saved.item.barcode)}`}>Print labels for {saved.items.length} pieces</Link>
-          : <Link className="ml-3 text-sm font-semibold text-ink-500 underline" to={`/labels?q=${encodeURIComponent(saved.item.barcode)}`}>Print label for {saved.item.barcode}</Link>)}
+
+        {/* All labels of the pieces just registered, on one page, printed together */}
+        {labels.length > 0 && (
+          <section className="card space-y-3 p-4 print:border-0 print:shadow-none">
+            <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+              <h2 className="font-extrabold text-ink">Labels ({labels.length})</h2>
+              <div className="flex gap-2">
+                <button type="button" className="btn-primary" onClick={() => window.print()}>Print all {labels.length} label{labels.length === 1 ? '' : 's'}</button>
+                <button type="button" className="btn-ghost" onClick={() => setLabels([])}>Close</button>
+              </div>
+            </div>
+            <div id="label-sheet" className="flex flex-wrap gap-2">
+              {labels.map((l) => (
+                <div key={l.barcode} className="overflow-hidden border border-dashed border-slate-300 bg-white print:border-0" style={{ width: '50mm', height: '25mm' }}>
+                  <LabelCard shop={settings.shopName || 'Your shop'} name={l.name} purity={l.purity} netWeight={l.netWeight} sku={l.sku} barcode={l.barcode} category={l.category} attrs={l.attrs} categories={cats} />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </form>
 
       <aside className="space-y-4 xl:sticky xl:top-4 xl:h-fit">
@@ -239,7 +274,7 @@ export default function RegisterProduct() {
           <h2 className="mb-2 font-extrabold text-ink">Label preview</h2>
           <div className="overflow-hidden rounded-md border border-dashed border-slate-300 bg-white" style={{ width: '100mm', height: '50mm', maxWidth: '100%' }}>
             <div style={{ transform: 'scale(2)', transformOrigin: 'top left', width: '50mm', height: '25mm' }}>
-              <LabelCard shop={settings.shopName || 'Your shop'} name={piece.name || f.name || 'Product name'} purity={f.purity} netWeight={net.toFixed(3)} sku={nextSku} barcode={piece.barcode || 'WN000000'} category={f.type} attrs={piece.attrs} categories={cats} />
+              <LabelCard shop={settings.shopName || 'Your shop'} name={piece.name || f.name || 'Product name'} purity={artificial ? '' : f.purity} netWeight={net.toFixed(3)} sku={nextSku} barcode={piece.barcode || 'WN000000'} category={f.type} attrs={piece.attrs} categories={cats} />
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">Printed size is 50 × 25 mm. This preview is enlarged.</p>
@@ -248,7 +283,7 @@ export default function RegisterProduct() {
         <section className="card p-4">
           <h2 className="mb-2 font-extrabold text-ink">Price today</h2>
           {preview?.price ? (<>
-            <PriceBreakup price={preview.price} rate={preview.rate} netWeight={net} grossWeight={gross} gstPercent={preview.gstPercent} charges={{ priceMethod: f.defaultPriceMethod, makingType: f.defaultMakingType, makingValue: f.defaultMakingValue, wastagePercent: f.defaultWastagePercent }} />
+            <PriceBreakup price={preview.price} rate={preview.rate} netWeight={net} grossWeight={gross} gstPercent={preview.gstPercent} charges={{ priceMethod: f.defaultPriceMethod, makingType: f.defaultMakingType, makingValue: f.defaultMakingValue, wastagePercent: 0 }} />
             <p className="mt-2 text-xs text-slate-500">Worked out with today's rate. The rate is saved on each bill, so later changes never alter an old bill.</p>
           </>) : <p className="text-sm text-slate-500">{preview?.message || 'Enter the weight to see the price.'}</p>}
         </section>
