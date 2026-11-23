@@ -35,6 +35,7 @@ export default function InvoiceView({ invoice, format = 'a4', copy = false, deta
   const tz = settings.timezone || 'Asia/Kolkata';
   const shop = invoice.shop?.name ? invoice.shop : { name: settings.shopName };
   const thermal = format === 'thermal';
+  const lines = invoice.lines || [];
   const pay = (invoice.payments || []).map((p) => `${p.mode === 'bank' ? 'BANK' : p.mode.toUpperCase()} ${money(p.amount)}`).join(', ');
 
   const taxable = Number(invoice.subtotal || 0) - Number(invoice.discount || 0);
@@ -57,7 +58,7 @@ export default function InvoiceView({ invoice, format = 'a4', copy = false, deta
         </div>
         <div className={thermal ? 'mt-2' : 'text-right'}>
           <div className="font-bold">Tax invoice {invoice.invoiceNo}</div>
-          <div className="text-slate-500">{fmtDateTime(invoice.createdAt, tz)}</div>
+          <div className="text-slate-500">{invoice.createdAt ? fmtDateTime(invoice.createdAt, tz) : ''}</div>
         </div>
       </div>
 
@@ -65,7 +66,7 @@ export default function InvoiceView({ invoice, format = 'a4', copy = false, deta
 
       {thermal ? (
         <div className="divide-y divide-paper-line">
-          {invoice.lines.map((l) => (
+          {lines.map((l) => (
             <div key={l.barcode} className="py-1.5">
               <div className="flex justify-between font-semibold"><span>{l.name}</span><span>{money(l.total)}</span></div>
               <div className="text-slate-500">{l.barcode} · {l.purity} · gross {l.grossWeight} g · net {l.netWeight} g</div>
@@ -79,7 +80,7 @@ export default function InvoiceView({ invoice, format = 'a4', copy = false, deta
             <tr><th className="py-2">Piece</th><th>Purity</th><th className="text-right">Gross g</th><th className="text-right">Net g</th><th className="text-right">Rate/g</th><th className="text-right">Amount</th></tr>
           </thead>
           <tbody>
-            {invoice.lines.map((l) => (
+            {lines.map((l) => (
               <Fragment key={l.barcode}>
                 <tr className={detailed ? '' : 'border-b border-paper-line'}>
                   <td className="py-2"><div className="font-semibold">{l.name}</div><div className="text-xs text-slate-500">{l.barcode}</div></td>
