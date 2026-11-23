@@ -27,6 +27,7 @@ import inventoryRoutes from './routes/inventory.js';
 import reportRoutes from './routes/reports.js';
 import systemRoutes from './routes/system.js';
 import pricingRoutes from './routes/pricing.js';
+import publicBillRoutes from './routes/publicBill.js';
 import { backupAndVerify } from './backup/backup.js';
 import { audit } from './utils/audit.js';
 
@@ -63,6 +64,12 @@ app.use((req, res, next) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { message: 'Too many sign-in attempts. Try again in 15 minutes.' } }));
+
+// Public bill link for customers (no login). Rate limited so tokens cannot be guessed.
+// Must stay above every route that asks for a login, including the '/api' metaRoutes at the bottom.
+app.use('/api/public', rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false, message: { message: 'Too many requests. Try again later.' } }));
+app.use('/api', publicBillRoutes);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/items', itemRoutes);
