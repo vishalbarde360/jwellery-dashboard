@@ -1,4 +1,4 @@
-# Aviraj Jewellery POS (MERN + Tailwind)
+# Avira Jewellery POS (MERN + Tailwind)
 
 ## Run
 

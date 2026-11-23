@@ -71,7 +71,7 @@ export default function Login() {
 
   return (
     <main className="login-page">
-      <section className="login-showcase" aria-label="Aviraj jewellery billing">
+      <section className="login-showcase" aria-label="Avira jewellery billing">
         <div className="login-showcase-glow login-showcase-glow-one" />
         <div className="login-showcase-glow login-showcase-glow-two" />
         <header className="login-showcase-header">
@@ -84,7 +84,7 @@ export default function Login() {
             <img src={loginNecklace} alt="Model wearing an emerald and gold necklace" />
             <div className="login-photo-shade" />
             <div className="login-feature-copy">
-              <span className="login-eyebrow">THE AVIRAJ EDIT</span>
+              <span className="login-eyebrow">THE Avira EDIT</span>
               <h2>Made to be<br />remembered.</h2>
             </div>
             <span className="login-photo-index">01 / 03</span>
@@ -142,7 +142,7 @@ export default function Login() {
           <div className="login-mobile-brand"><BrandMark compact /></div>
           <div className="login-form-heading">
             <div className="login-form-logo"><BrandMark compact /></div>
-            <p className="login-form-overline">WELCOME TO AVIRAJ</p>
+            <p className="login-form-overline">WELCOME TO Avira</p>
             <h2>Sign in</h2>
             <p className="login-form-subtitle">Welcome back! Please sign in to continue.</p>
           </div>

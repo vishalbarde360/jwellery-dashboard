@@ -19,7 +19,7 @@ const row = (name, samples, target, stat = 'p95') => {
 };
 
 before(async () => {
-  app = await startApp({ dbName: 'Aviraj _test_perf', port: 5102 });
+  app = await startApp({ dbName: 'Avira _test_perf', port: 5102 });
   [cashier, manager, owner, accountant] = await Promise.all(['cashier', 'manager', 'owner', 'accountant'].map((r) => app.as(r)));
   const t = app.tenants.demo, now = Date.now(), db = app.db;
   const product = (await db.collection('products').findOne({ tenant: t }))._id;

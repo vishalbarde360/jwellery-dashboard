@@ -1,4 +1,4 @@
-/** Design tokens for Aviraj  POS */
+/** Design tokens for Avira  POS */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {

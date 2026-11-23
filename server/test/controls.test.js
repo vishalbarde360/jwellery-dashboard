@@ -6,7 +6,7 @@ import { startApp } from './helpers.js';
 
 let app, owner, cashier, accountant, inventory;
 before(async () => {
-  app = await startApp({ dbName: 'Aviraj _test_controls', port: 5103 });
+  app = await startApp({ dbName: 'Avira _test_controls', port: 5103 });
   [owner, cashier, accountant, inventory] = await Promise.all(['owner', 'cashier', 'accountant', 'inventory'].map((r) => app.as(r)));
 });
 after(async () => { await app?.stop(); });

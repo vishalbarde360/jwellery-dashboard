@@ -1,5 +1,5 @@
 {
-  "name": "Aviraj -pos",
+  "name": "Avira -pos",
   "private": true,
   "scripts": {
     "install:all": "npm install --prefix server && npm install --prefix client",

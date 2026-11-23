@@ -22,7 +22,7 @@ const sell = (api, barcodes, total, extra = {}) =>
   api('POST', '/api/invoices', { barcodes, payments: PAY(total), ...extra }, { 'Idempotency-Key': app.key() });
 
 before(async () => {
-  app = await startApp({ dbName: 'Aviraj _test_acceptance', port: 5101 });
+  app = await startApp({ dbName: 'Avira _test_acceptance', port: 5101 });
   [owner, manager, cashier, accountant, inventory, sysadmin] = await Promise.all(
     ['owner', 'manager', 'cashier', 'accountant', 'inventory', 'sysadmin'].map((r) => app.as(r)));
   rival = await app.as('rival', 'rival1234');
@@ -476,7 +476,7 @@ describe('Backup restore: restore works and data integrity is checked', () => {
   before(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wn-backup-')); });
   after(async () => {
     fs.rmSync(dir, { recursive: true, force: true });
-    for (const d of (await app.client.db().admin().listDatabases()).databases) if (d.name.startsWith('Aviraj _test_restored_')) await app.client.db(d.name).dropDatabase();
+    for (const d of (await app.client.db().admin().listDatabases()).databases) if (d.name.startsWith('Avira _test_restored_')) await app.client.db(d.name).dropDatabase();
   });
   it('npm run backup makes a file, restore-tests it, and reports ok', () => {
     const r = run('scripts/backup.js');
@@ -490,7 +490,7 @@ describe('Backup restore: restore works and data integrity is checked', () => {
     assert.ok(fs.existsSync(backupFile));
   });
   it('a real restore into a new database reproduces every record exactly', async () => {
-    const target = 'Aviraj _test_restored_' + Date.now();
+    const target = 'Avira _test_restored_' + Date.now();
     const r = run('scripts/restore.js', [backupFile, target]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     const src = app.client.db(app.dbName), dst = app.client.db(target);
@@ -517,7 +517,7 @@ describe('Backup restore: restore works and data integrity is checked', () => {
     const buf = fs.readFileSync(backupFile); buf[Math.floor(buf.length / 2)] ^= 0xff;
     fs.writeFileSync(bad, buf);
     fs.copyFileSync(path.join(dir, manifestFile), path.join(dir, 'bad.manifest.json'));
-    const r = run('scripts/restore.js', [bad, 'Aviraj _test_restored_bad' + Date.now()]);
+    const r = run('scripts/restore.js', [bad, 'Avira _test_restored_bad' + Date.now()]);
     assert.notEqual(r.status, 0);
     assert.match(r.stdout + r.stderr, /damaged|checksum/i);
   });

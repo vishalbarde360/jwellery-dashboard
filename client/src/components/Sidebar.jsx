@@ -65,7 +65,7 @@ function Panel({ branches, branch, setBranch, onNavigate }) {
       <div className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
         <img src={aviraLogo} alt="Avira Jewels" className="h-12 w-12 shrink-0 rounded-lg bg-[#3a0f1b] object-contain" />
         <div className="min-w-0">
-          <div className="truncate text-sm font-extrabold">{settings?.shopName || 'Aviraj Jewellery'}</div>
+          <div className="truncate text-sm font-extrabold">{settings?.shopName || 'Avira Jewellery'}</div>
           <div className="text-[9px] font-bold tracking-widest text-[#c9a46a]/80">ENTERPRISE POS & INVENTORY</div>
         </div>
       </div>
@@ -140,7 +140,7 @@ export default function Sidebar({ branches = [] }) {
       <div className="print:hidden flex items-center gap-3 px-4 py-3 text-white md:hidden" style={{ background: MAROON }}>
         <button onClick={() => setOpen(true)} aria-label="Open menu" className="text-xl">☰</button>
         <img src={aviraLogo} alt="Avira Jewels" className="h-9 w-9 shrink-0 rounded-lg bg-[#3a0f1b] object-contain" />
-        <span className="font-extrabold">{settings?.shopName || 'Aviraj Jewellery'}</span>
+        <span className="font-extrabold">{settings?.shopName || 'Avira Jewellery'}</span>
       </div>
       {open && (
         <div className="print:hidden fixed inset-0 z-40 md:hidden">
