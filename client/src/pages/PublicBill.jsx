@@ -32,7 +32,7 @@ export default function PublicBill() {
         </div>
       </div>
       <div className="overflow-x-auto">
-        <InvoiceView invoice={inv} format={format} />
+       <InvoiceView invoice={inv} format={format} detailed />
       </div>
     </div>
   );
