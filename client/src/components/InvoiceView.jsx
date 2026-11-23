@@ -1,13 +1,44 @@
+import { Fragment } from 'react';
 import { money } from '../status';
 import { fmtDateTime } from '../format';
 import { useAuth } from '../context/AuthContext';
 
+// Price breakup of one piece (metal value, making, wastage, stones), from the figures frozen on the bill.
+function Breakup({ l }) {
+  const b = l.breakup || {};
+  const c = l.charges || {};
+  if (b.metalValue == null) return null;
+  const making = c.makingType === 'percent' ? `Making charge, ${c.makingValue}%`
+    : c.makingType === 'per_gram' ? `Making charge, ${money(c.makingValue)} per g`
+    : 'Making charge';
+  const rows = [
+    [l.ratePerGram ? `Metal value (${l.netWeight} g × ${money(l.ratePerGram)} per gram)` : 'Metal value', b.metalValue],
+    [making, b.making],
+    [`Wastage, ${c.wastagePercent || 0}% of metal value`, b.wastage],
+    ['Stones', b.stones],
+    ...(Number(b.fixedPrice) > 0 ? [['Fixed price', b.fixedPrice]] : []),
+    ['Subtotal', b.subtotal],
+  ].filter(([, v]) => v !== undefined && v !== null);
+  return (
+    <div className="mt-1 space-y-0.5 rounded bg-[#faf4e8] p-2 text-xs text-slate-600">
+      {rows.map(([k, v]) => <div key={k} className="flex justify-between gap-3"><span>{k}</span><span>{money(v)}</span></div>)}
+    </div>
+  );
+}
+
 // Invoice and print. A4 or thermal (80 mm). Uses the shop details frozen on the bill, so old bills never change.
-export default function InvoiceView({ invoice, format = 'a4', copy = false }) {
-  const { settings } = useAuth();
+// detailed = also show the price breakup under every piece and the round off (used on the customer's bill link).
+export default function InvoiceView({ invoice, format = 'a4', copy = false, detailed = false }) {
+  // The customer's bill link has no login, so settings can be empty there. Fall back safely.
+  const auth = useAuth();
+  const settings = auth?.settings || {};
+  const tz = settings.timezone || 'Asia/Kolkata';
   const shop = invoice.shop?.name ? invoice.shop : { name: settings.shopName };
   const thermal = format === 'thermal';
-  const pay = invoice.payments.map((p) => `${p.mode === 'bank' ? 'BANK' : p.mode.toUpperCase()} ${money(p.amount)}`).join(', ');
+  const pay = (invoice.payments || []).map((p) => `${p.mode === 'bank' ? 'BANK' : p.mode.toUpperCase()} ${money(p.amount)}`).join(', ');
+
+  const taxable = Number(invoice.subtotal || 0) - Number(invoice.discount || 0);
+  const roundOff = Math.round((Number(invoice.grandTotal || 0) - (taxable + Number(invoice.gst || 0))) * 100) / 100;
 
   return (
     <div id="invoice" className={`card relative mx-auto p-6 text-sm ${thermal ? 'max-w-[80mm] !p-3 text-xs' : 'max-w-3xl'}`}>
@@ -26,7 +57,7 @@ export default function InvoiceView({ invoice, format = 'a4', copy = false }) {
         </div>
         <div className={thermal ? 'mt-2' : 'text-right'}>
           <div className="font-bold">Tax invoice {invoice.invoiceNo}</div>
-          <div className="text-slate-500">{fmtDateTime(invoice.createdAt, settings.timezone)}</div>
+          <div className="text-slate-500">{fmtDateTime(invoice.createdAt, tz)}</div>
         </div>
       </div>
 
@@ -38,6 +69,7 @@ export default function InvoiceView({ invoice, format = 'a4', copy = false }) {
             <div key={l.barcode} className="py-1.5">
               <div className="flex justify-between font-semibold"><span>{l.name}</span><span>{money(l.total)}</span></div>
               <div className="text-slate-500">{l.barcode} · {l.purity} · gross {l.grossWeight} g · net {l.netWeight} g</div>
+              {detailed && <Breakup l={l} />}
             </div>
           ))}
         </div>
@@ -48,11 +80,14 @@ export default function InvoiceView({ invoice, format = 'a4', copy = false }) {
           </thead>
           <tbody>
             {invoice.lines.map((l) => (
-              <tr key={l.barcode} className="border-b border-paper-line">
-                <td className="py-2"><div className="font-semibold">{l.name}</div><div className="text-xs text-slate-500">{l.barcode}</div></td>
-                <td>{l.purity}</td><td className="text-right">{l.grossWeight}</td><td className="text-right">{l.netWeight}</td>
-                <td className="text-right">{l.ratePerGram ? money(l.ratePerGram) : 'Fixed'}</td><td className="text-right font-semibold">{money(l.total)}</td>
-              </tr>
+              <Fragment key={l.barcode}>
+                <tr className={detailed ? '' : 'border-b border-paper-line'}>
+                  <td className="py-2"><div className="font-semibold">{l.name}</div><div className="text-xs text-slate-500">{l.barcode}</div></td>
+                  <td>{l.purity}</td><td className="text-right">{l.grossWeight}</td><td className="text-right">{l.netWeight}</td>
+                  <td className="text-right">{l.ratePerGram ? money(l.ratePerGram) : 'Fixed'}</td><td className="text-right font-semibold">{money(l.total)}</td>
+                </tr>
+                {detailed && <tr className="border-b border-paper-line"><td colSpan={6} className="pb-2"><Breakup l={l} /></td></tr>}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -67,6 +102,7 @@ export default function InvoiceView({ invoice, format = 'a4', copy = false }) {
               <div className="flex justify-between"><dt>CGST</dt><dd>{money(invoice.cgst ?? invoice.gst / 2)}</dd></div>
               <div className="flex justify-between"><dt>SGST</dt><dd>{money(invoice.sgst ?? invoice.gst - invoice.gst / 2)}</dd></div>
             </>}
+        {detailed && roundOff !== 0 && <div className="flex justify-between text-slate-500"><dt>Round off</dt><dd>{roundOff > 0 ? '+' : '−'}{money(Math.abs(roundOff))}</dd></div>}
         <div className="flex justify-between border-t border-paper-line pt-1 text-base font-extrabold text-ink"><dt>Total</dt><dd>{money(invoice.grandTotal)}</dd></div>
       </dl>
       <div className="mt-3 text-slate-600">Paid by: {pay}</div>
