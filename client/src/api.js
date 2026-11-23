@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 
 const apiBaseUrl = import.meta.env.VITE_API_URL || (
@@ -27,9 +26,11 @@ api.interceptors.request.use((cfg) => {
 api.interceptors.response.use(
   (response) => response,
   (err) => {
+    // Public pages (login, customer bill link) must never be thrown back to the login screen.
     if (
       err.response?.status === 401 &&
-      !location.pathname.startsWith('/login')
+      !location.pathname.startsWith('/login') &&
+      !location.pathname.startsWith('/bill/')
     ) {
       localStorage.removeItem('wn_token');
       location.href = '/login';
