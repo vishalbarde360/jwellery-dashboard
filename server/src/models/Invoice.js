@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const lineSchema = new mongoose.Schema(
   {
@@ -41,6 +42,8 @@ const s = new mongoose.Schema(
     amountPaid: Number,
     payments: [paymentSchema],
     status: { type: String, enum: ['paid', 'void'], default: 'paid' },
+    // Random token for the customer's public bill link (/bill/:token). Created automatically for every new invoice.
+    publicToken: { type: String, default: () => crypto.randomBytes(8).toString('hex'), index: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
