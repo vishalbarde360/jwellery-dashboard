@@ -22,6 +22,7 @@ import System from './pages/System';
 import RegisterProduct from './pages/RegisterProduct';
 import InvoiceDetail from './pages/InvoiceDetail';
 import InvoiceByNo from './pages/InvoiceByNo';
+import PublicBill from './pages/PublicBill';
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/billing" element={<ProtectedRoute perm="billing.create"><Billing /></ProtectedRoute>} />
         <Route path="/inventory" element={<ProtectedRoute perm="stock.read"><Inventory /></ProtectedRoute>} />
         <Route path="/invoices" element={<Invoices />} />
+        <Route path="/bill/:token" element={<PublicBill />} />
         <Route path="/invoices/no/:no" element={<InvoiceByNo />} />
         <Route path="/invoices/:id" element={<InvoiceDetail />} />
         <Route path="/register" element={<ProtectedRoute perm="products.write"><RegisterProduct /></ProtectedRoute>} />
