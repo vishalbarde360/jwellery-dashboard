@@ -312,10 +312,14 @@ export default function Billing() {
           {can('billing.discount') && (
             <div className="rounded-lg bg-[#fbf1d8] p-3">
               <div className="mb-1 flex items-center justify-between text-xs font-semibold text-[#7a5a12]"><label htmlFor="ds">Discount</label>{quote?.discount > 0 && <span>− {money(quote.discount)}</span>}</div>
-              <div className="flex gap-2">
-                <input id="ds" className={input} inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} />
-                <div className="flex overflow-hidden rounded-lg border border-[#e2d5bc] text-sm font-bold">
-                  {[['inr', '₹'], ['pct', '%']].map(([k, l]) => <button key={k} type="button" onClick={() => setDiscMode(k)} className={`px-3 ${discMode === k ? 'text-white' : 'bg-white text-stone-500'}`} style={discMode === k ? { background: MAROON } : {}}>{l}</button>)}
+              <div className="flex items-stretch gap-2">
+                <input id="ds" className={`${input} min-w-0 flex-1`} inputMode="decimal" placeholder={discMode === 'pct' ? '0 %' : '0 ₹'} value={discount} onChange={(e) => setDiscount(e.target.value)} />
+                <div className="flex shrink-0 gap-1 rounded-lg border border-[#e2d5bc] bg-white p-1" role="radiogroup" aria-label="Discount type">
+                  {[['inr', '₹'], ['pct', '%']].map(([k, l]) => (
+                    <button key={k} type="button" role="radio" aria-checked={discMode === k} onClick={() => setDiscMode(k)}
+                      className={`grid w-9 place-items-center rounded-md text-sm font-bold transition ${discMode === k ? 'text-white shadow-sm' : 'text-stone-500 hover:bg-[#faf4e8]'}`}
+                      style={discMode === k ? { background: MAROON } : {}}>{l}</button>
+                  ))}
                 </div>
               </div>
               <label className={`${lab} mt-2`} htmlFor="pos">Place of supply (state code, optional)</label>
@@ -351,10 +355,10 @@ export default function Billing() {
                       className={`rounded-lg border px-1 py-2.5 text-center text-[11px] font-bold ${p.mode === k ? 'text-white' : 'border-[#e2d5bc] bg-white text-stone-600 hover:bg-[#faf4e8]'}`} style={p.mode === k ? { background: MAROON, borderColor: MAROON } : {}}>{l}</button>
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <input aria-label="Amount" className={`${input} text-lg font-extrabold`} inputMode="decimal" value={p.amount} onChange={(e) => setPay(i, { amount: e.target.value })} />
-                  <button type="button" className={btnGhost} disabled={!quote} onClick={() => setPay(i, { amount: String(Math.max(r2(total - others), 0)) })}>Exact ₹</button>
-                  {pays.length > 1 && <button type="button" className="text-xs font-semibold text-red-700" onClick={() => setPays(pays.filter((_, j) => j !== i))}>Remove</button>}
+                <div className="flex items-stretch gap-2">
+                  <input aria-label="Amount" className={`${input} min-w-0 flex-1 text-lg font-extrabold`} inputMode="decimal" value={p.amount} onChange={(e) => setPay(i, { amount: e.target.value })} />
+                  <button type="button" className={`${btnGhost} shrink-0 whitespace-nowrap`} disabled={!quote} onClick={() => setPay(i, { amount: String(Math.max(r2(total - others), 0)) })}>Exact ₹</button>
+                  {pays.length > 1 && <button type="button" className="shrink-0 whitespace-nowrap text-xs font-semibold text-red-700" onClick={() => setPays(pays.filter((_, j) => j !== i))}>Remove</button>}
                 </div>
               </div>
             );
