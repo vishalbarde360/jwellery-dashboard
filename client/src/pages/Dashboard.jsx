@@ -63,9 +63,8 @@ const hourOf = (label) => {
 };
 const hourLabel = (h) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
 // Today view: always show the whole working day (9 AM to 9 PM, wider if there are earlier/later sales),
-// with 0 for hours that have no sale yet, so earlier sales never drop off when a new one arrives.
+// with 0 for hours that have no sale yet. Works even when there are no bills at all (flat line at 0).
 const fullDay = (points) => {
-  if (!points.length) return points;
   const hrs = points.map((p) => hourOf(p.label));
   if (hrs.some((h) => h === null)) return points;
   const sums = {};
@@ -77,6 +76,13 @@ const fullDay = (points) => {
   const start = Math.min(9, ...hrs);
   const end = Math.max(21, ...hrs);
   return Array.from({ length: end - start + 1 }, (_, k) => ({ label: hourLabel(start + k), value: sums[start + k] || 0, sales: lists[start + k] || [] }));
+};
+// Week / Month view when the server sends nothing: flat zero line with default labels.
+const emptySeries = (range) => {
+  const labels = range === 'week'
+    ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    : Array.from({ length: 30 }, (_, i) => String(i + 1));
+  return labels.map((label) => ({ label, value: 0, sales: [] }));
 };
 
 /* ---------- small inline icons (no extra package needed) ---------- */
@@ -137,7 +143,9 @@ function Kpi({ label, icon, value, bar, helper, chip, deco }) {
 function AreaChart({ points }) {
   const [hov, setHov] = useState(null);
   const W = 640, H = 220, L = 52, R = 16, T = 24, B = 30;
-  const top = niceMax(Math.max(...points.map((p) => Number(p.value) || 0), 0));
+  const maxVal = Math.max(...points.map((p) => Number(p.value) || 0), 0);
+  // No sales yet: use a clean default scale so the axis reads ₹0 ... ₹10K instead of ₹1, ₹0.75 ...
+  const top = maxVal > 0 ? niceMax(maxVal) : 10000;
   const step = (W - L - R) / Math.max(points.length - 1, 1);
   const X = (i) => L + i * step;
   const Y = (v) => H - B - ((Number(v) || 0) / top) * (H - T - B);
@@ -287,8 +295,8 @@ export default function Dashboard() {
   const hasCost = rows[0]?.cost !== undefined;
   const collected = d?.sales?.byMode?.reduce((s, m) => s + Number(m.amount), 0) || 0;
   const hourly = (d?.hourly || []).map((p) => ({ label: p.label, value: Number(p.value) || 0, sales: Array.isArray(p.sales) ? p.sales : [] }));
-  const series = range === 'today' ? fullDay(hourly) : hourly;
-  const hasGraph = series.some((p) => p.value > 0);
+  let series = range === 'today' ? fullDay(hourly) : hourly;
+  if (!series.length && range !== 'today') series = emptySeries(range);
   const mix = d?.mix || [];
   const mixTotal = mix.reduce((s, m) => s + Number(m.amount), 0);
   const recent = d?.recent || [];
@@ -399,15 +407,9 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="border-t border-[#f3ebdc] pt-3">
-            {hasGraph ? <AreaChart key={range} points={series} /> : (
-              <div className="grid h-56 place-items-center text-center">
-                <div>
-                  <div className="mx-auto mb-3 grid h-10 w-10 animate-spin place-items-center rounded-full border border-[#e8d9b4] border-t-[#b8892f]" />
-                  <div className="text-xs font-bold" style={{ color: MAROON }}>{d ? 'Awaiting counter transactions...' : 'Loading…'}</div>
-                  {d && <div className="mt-1 text-[11px] text-stone-400">Live analytics will chart when the first receipt is created</div>}
-                </div>
-              </div>
-            )}
+            {series.length > 0
+              ? <AreaChart key={range} points={series} />
+              : <div className="grid h-56 place-items-center text-xs text-stone-400">{d ? 'No data' : 'Loading…'}</div>}
           </div>
           {mix.length > 0 && (
             <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
