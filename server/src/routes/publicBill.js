@@ -5,7 +5,7 @@ const router = express.Router();
 
 // Login nasnara route. Customer la bill dakhavto.
 router.get('/public/invoice/:token', async (req, res) => {
-  const inv = await Invoice.findOne({ publicToken: req.params.token, status: 'paid' }).lean();
+  const inv = await Invoice.findOne({ publicToken: req.params.token, status: 'paid' }).setOptions({ publicLookup: true }).lean();
   if (!inv) return res.status(404).json({ message: 'Not found' });
   // Fakt customer la lagnari mahiti. Cost, margin, breakup, charges kadhihi nako.
   res.json({
