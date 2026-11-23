@@ -5,6 +5,7 @@ import { money, newKey } from '../status';
 import { Notice } from '../components/Bits';
 import InvoiceView from '../components/InvoiceView';
 import FormatToggle from '../components/FormatToggle';
+import { waLink } from '../whatsapp';
 
 const MAROON = '#4a1424';
 const GOLD = '#b8892f';
@@ -22,6 +23,14 @@ const timeNow = () => new Date().toLocaleTimeString('en-IN', { hour: 'numeric', 
 
 const Pencil = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>;
 const Trash = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></svg>;
+
+// Builds the WhatsApp link for a saved invoice and a customer.
+const waFor = (cust, inv) => (cust?.phone ? waLink(cust.phone, {
+  customerName: cust.name,
+  number: inv?.number || inv?.invoiceNo || '',
+  total: inv?.grandTotal ?? inv?.total ?? '',
+  publicUrl: inv?.publicUrl,
+}) : null);
 
 function Tile({ label, value }) {
   return (
@@ -117,14 +126,28 @@ export default function Billing() {
     const body = { barcodes: codes, discount: effDiscount, overrides: overrideList, placeOfSupply: pos || undefined, customerId: customer?._id, payments: pays.map((p) => ({ mode: p.mode, amount: Number(p.amount) })) };
     const sig = JSON.stringify(body);
     if (keyRef.current.sig !== sig) keyRef.current = { sig, key: newKey() };
+
+    // Open the WhatsApp tab right now, inside the click, so the browser does not block it.
+    // Only when the customer has a phone number. Walk-in bills skip this.
+    const wa = customer?.phone ? window.open('', '_blank') : null;
+
     setSaving(true); setMsg(null);
     try {
       const { data } = await api.post('/invoices', body, { headers: { 'Idempotency-Key': keyRef.current.key } });
       setDone(data); // "Paid" is only ever shown after the server confirms the save
+      const link = waFor(customer, data);
+      if (wa) { if (link) wa.location.href = link; else wa.close(); }
     } catch (x) {
+      wa?.close();
       setConfirming(false);
       setMsg({ type: 'err', text: x.response ? `Bill not saved. ${errMsg(x)}. Nothing was recorded and the pieces are still unsold.` : "We couldn't confirm whether the bill was saved. Press Save again. It will not create a second bill." });
     } finally { setSaving(false); }
+  };
+
+  // Manual resend from the "Paid" screen, in case the tab was blocked or closed.
+  const sendWhatsApp = () => {
+    const link = waFor(customer, done);
+    if (link) window.open(link, '_blank');
   };
 
   const reset = () => { setCodes([]); setDiscount(''); setDiscMode('inr'); setPos(''); setOverrides({}); setCustomer(null); setPays([{ mode: 'cash', amount: '' }]); setDone(null); setMsg(null); setConfirming(false); keyRef.current = { sig: '', key: '' }; };
@@ -148,6 +171,7 @@ export default function Billing() {
           <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-800">Paid</span>
           <FormatToggle value={format} onChange={setFormat} />
           <button className={btnMain} style={{ background: MAROON }} onClick={() => window.print()}>Print invoice</button>
+          {customer?.phone && <button className={btnMain} style={{ background: '#1f9d55' }} onClick={sendWhatsApp}>Send on WhatsApp</button>}
           <button className={btnGhost} onClick={reset}>New bill</button>
         </div>
         <InvoiceView invoice={done} format={format} />
@@ -337,6 +361,7 @@ export default function Billing() {
           <div className="space-y-2 rounded-xl border border-[#b8892f] bg-[#fbf1d8] p-4 text-sm">
             <div className="font-bold" style={{ color: MAROON }}>Save this bill?</div>
             <div>{codes.length} piece{codes.length > 1 ? 's' : ''}, total {money(total)}{customer ? `, for ${customer.name}` : ''}. Paid: {pays.map((p) => `${p.mode} ${money(p.amount)}`).join(', ')}.</div>
+            {customer?.phone && <div className="text-xs font-semibold text-emerald-800">After saving, WhatsApp will open for {customer.phone}.</div>}
             <div className="flex gap-2"><button className={`${btnMain} flex-1`} style={{ background: MAROON }} disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Confirm and save'}</button><button className={btnGhost} disabled={saving} onClick={() => setConfirming(false)}>Back</button></div>
           </div>
         )}
