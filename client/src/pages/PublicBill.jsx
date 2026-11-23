@@ -16,7 +16,7 @@ export default function PublicBill() {
   useEffect(() => {
     api.get(`/public/invoice/${encodeURIComponent(token)}`)
       .then((r) => setInv(r.data))
-      .catch(() => setErr('Bill sapadla nahi.'));
+      .catch(() => setErr('Bill not found.'));
   }, [token]);
 
   if (err) return <div className="p-8 text-center text-stone-600">{err}</div>;
