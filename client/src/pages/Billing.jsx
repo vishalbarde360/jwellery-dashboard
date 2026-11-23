@@ -21,6 +21,12 @@ const MODES = [['cash', 'Cash'], ['upi', 'UPI / QR'], ['card', 'POS Card'], ['ba
 const r2 = (n) => Math.round(n * 100) / 100;
 const timeNow = () => new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
 
+// WhatsApp always opens in the same named tab, so a second bill reuses the WhatsApp Web tab that is already open.
+const WA_TAB = 'wa_tab';
+// Closes a tab only if it is a blank one we just opened. An existing WhatsApp Web tab is on another site, so the
+// check throws and the tab is left alone.
+const closeIfBlank = (w) => { try { if (w && w.location.href === 'about:blank') w.close(); } catch { /* existing WhatsApp tab: leave it open */ } };
+
 const Pencil = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>;
 const Trash = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></svg>;
 
@@ -127,18 +133,20 @@ export default function Billing() {
     const sig = JSON.stringify(body);
     if (keyRef.current.sig !== sig) keyRef.current = { sig, key: newKey() };
 
-    // Open the WhatsApp tab right now, inside the click, so the browser does not block it.
-    // Only when the customer has a phone number. Walk-in bills skip this.
-    const wa = customer?.phone ? window.open('', '_blank') : null;
+    // Grab the WhatsApp tab right now, inside the click, so the browser does not block it.
+    // If a tab named wa_tab is already open (WhatsApp Web), it is reused. Walk-in bills skip this.
+    const wa = customer?.phone ? window.open('', WA_TAB) : null;
 
     setSaving(true); setMsg(null);
     try {
       const { data } = await api.post('/invoices', body, { headers: { 'Idempotency-Key': keyRef.current.key } });
       setDone(data); // "Paid" is only ever shown after the server confirms the save
       const link = waFor(customer, data);
-      if (wa) { if (link) wa.location.href = link; else wa.close(); }
+      if (wa) {
+        if (link) { wa.location.href = link; wa.focus(); } else closeIfBlank(wa);
+      }
     } catch (x) {
-      wa?.close();
+      closeIfBlank(wa);
       setConfirming(false);
       setMsg({ type: 'err', text: x.response ? `Bill not saved. ${errMsg(x)}. Nothing was recorded and the pieces are still unsold.` : "We couldn't confirm whether the bill was saved. Press Save again. It will not create a second bill." });
     } finally { setSaving(false); }
@@ -147,7 +155,9 @@ export default function Billing() {
   // Manual resend from the "Paid" screen, in case the tab was blocked or closed.
   const sendWhatsApp = () => {
     const link = waFor(customer, done);
-    if (link) window.open(link, '_blank');
+    if (!link) return;
+    const w = window.open(link, WA_TAB);
+    w?.focus();
   };
 
   const reset = () => { setCodes([]); setDiscount(''); setDiscMode('inr'); setPos(''); setOverrides({}); setCustomer(null); setPays([{ mode: 'cash', amount: '' }]); setDone(null); setMsg(null); setConfirming(false); keyRef.current = { sig: '', key: '' }; };
